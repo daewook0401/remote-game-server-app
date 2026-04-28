@@ -66,3 +66,12 @@ Agent Docker 콘솔 로그 조회와 명령 전송 연결
 - 원격 서버 업데이트가 가능하도록 Agent/Desktop 기대 버전을 `0.1.5`로 올린다.
 - Desktop이 `volumePath`를 보내지 못한 경우에도 Agent가 Minecraft 컨테이너 이름으로 기본 볼륨 경로를 계산하도록 수정한다.
 - Agent/Desktop 기대 버전을 `0.1.6`으로 올린다.
+
+## Snap Docker 볼륨 정책 수정
+
+- Agent가 `docker info --format {{.DockerRootDir}}`로 Docker root dir을 확인한다.
+- Docker root dir이 `/var/snap/docker/...`이면 snap Docker로 판단한다.
+- snap Docker에서 `/remote-game-server/volume/...` 경로가 들어오면 `/home/{sshUser}/remote-game-server/volume/...`로 보정한다.
+- apt/공식 Docker에서는 기존 `/remote-game-server/volume/...` 경로를 유지한다.
+- Desktop도 Agent 상태의 `isSnapDocker` 값과 선택 서버의 SSH user를 기준으로 생성 모달의 예상 데이터 경로를 home 경로로 보여준다.
+- Agent/Desktop 기대 버전을 `0.1.7`로 올린다.

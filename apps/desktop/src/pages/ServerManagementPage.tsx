@@ -748,7 +748,15 @@ export function ServerManagementPage() {
   function buildVolumePath(gameTemplateId: string, serverName: string) {
     const gameName = gameTemplateId === "minecraft-java" ? "minecraft" : gameTemplateId;
     const safeServerName = serverName.trim().replace(/[^a-zA-Z0-9_.-]/g, "-") || "server";
-    return `${PRODUCT_VOLUME_ROOT}/${gameName}/${safeServerName}`;
+    return `${buildVolumeRoot()}/${gameName}/${safeServerName}`;
+  }
+
+  function buildVolumeRoot() {
+    if (dockerStatus?.isSnapDocker && activeServer?.sshUser) {
+      return `/home/${activeServer.sshUser}/remote-game-server/volume`;
+    }
+
+    return PRODUCT_VOLUME_ROOT;
   }
 
   async function handleConfirmCreateServer() {

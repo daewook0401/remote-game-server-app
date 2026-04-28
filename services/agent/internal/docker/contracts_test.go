@@ -106,6 +106,28 @@ func TestBuildMinecraftRunArgsUsesDefaultVolumePath(t *testing.T) {
 	}
 }
 
+func TestSnapDockerUsesHomeVolumePath(t *testing.T) {
+	adapter := &CLIAdapter{dockerPath: "docker"}
+	request := CreateMinecraftServerRequest{
+		TargetType:     "remote",
+		SSHUser:        "daewook",
+		GameTemplateID: "minecraft-java",
+		InstanceID:     "instance-1",
+		ContainerName:  "minecraft-survival",
+		Image:          "itzg/minecraft-server",
+		InternalPort:   25565,
+		ExternalPort:   25580,
+		Memory:         "2G",
+		EulaAccepted:   true,
+		VolumePath:     "/remote-game-server/volume/minecraft/minecraft-survival",
+	}
+
+	normalized := adapter.normalizeMinecraftServerRequestWithRoot(request, "/var/snap/docker/common/var-lib-docker")
+	if normalized.VolumePath != "/home/daewook/remote-game-server/volume/minecraft/minecraft-survival" {
+		t.Fatalf("unexpected snap-safe volume path: %q", normalized.VolumePath)
+	}
+}
+
 func TestBuildManagedContainerListArgs(t *testing.T) {
 	args := BuildManagedContainerListArgs()
 	joined := strings.Join(args, " ")
@@ -142,6 +164,10 @@ func TestParseManagedContainerRows(t *testing.T) {
 func TestManagedVolumePathSafety(t *testing.T) {
 	if !isSafeManagedVolumePath("/remote-game-server/volume/minecraft/minecraft-survival") {
 		t.Fatal("expected managed volume path to be safe")
+	}
+
+	if !isSafeManagedVolumePath("/home/daewook/remote-game-server/volume/minecraft/minecraft-survival") {
+		t.Fatal("expected home managed volume path to be safe")
 	}
 
 	if isSafeManagedVolumePath("/var/lib/docker") {

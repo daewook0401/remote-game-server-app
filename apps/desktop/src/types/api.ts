@@ -57,6 +57,8 @@ export interface DockerStatusResponse {
   mode: "memory" | "cli";
   message: string;
   agentVersion?: string;
+  dockerRootDir?: string;
+  isSnapDocker?: boolean;
 }
 
 export interface RelayPortAllocationResponse {

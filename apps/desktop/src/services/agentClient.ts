@@ -11,7 +11,7 @@ import type {
 import { getJSON, postJSON } from "./httpClient";
 
 const AGENT_BASE_URL = "http://127.0.0.1:18080";
-export const EXPECTED_AGENT_VERSION = "0.1.6";
+export const EXPECTED_AGENT_VERSION = "0.1.7";
 
 function agentUrl(path: string, baseUrl = AGENT_BASE_URL) {
   return `${baseUrl.replace(/\/$/, "")}${path}`;

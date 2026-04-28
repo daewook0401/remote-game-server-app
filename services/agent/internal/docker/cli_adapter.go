@@ -30,11 +30,23 @@ func (adapter *CLIAdapter) Status() DockerStatus {
 		}
 	}
 
+	dockerRootDir := adapter.dockerRootDir()
 	return DockerStatus{
-		Available: true,
-		Mode:      "cli",
-		Message:   "docker cli is available",
+		Available:     true,
+		Mode:          "cli",
+		Message:       "docker cli is available",
+		DockerRootDir: dockerRootDir,
+		IsSnapDocker:  isSnapDockerRoot(dockerRootDir),
 	}
+}
+
+func (adapter *CLIAdapter) dockerRootDir() string {
+	output, err := exec.Command(adapter.dockerPath, "info", "--format", "{{.DockerRootDir}}").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(string(output))
 }
 
 func (adapter *CLIAdapter) ListManagedContainers() ([]ContainerSummary, error) {
@@ -59,7 +71,7 @@ func (adapter *CLIAdapter) CreateMinecraftServer(request CreateMinecraftServerRe
 		return ContainerSummary{}, errors.New("minecraft eula must be accepted")
 	}
 
-	request = NormalizeMinecraftServerRequest(request)
+	request = adapter.normalizeMinecraftServerRequest(request)
 	if request.VolumePath != "" {
 		if err := ensureManagedVolumePath(request.VolumePath); err != nil {
 			return ContainerSummary{}, err
@@ -251,6 +263,27 @@ func BuildMinecraftRunArgs(request CreateMinecraftServerRequest) []string {
 	return args
 }
 
+func (adapter *CLIAdapter) normalizeMinecraftServerRequest(request CreateMinecraftServerRequest) CreateMinecraftServerRequest {
+	return adapter.normalizeMinecraftServerRequestWithRoot(request, adapter.dockerRootDir())
+}
+
+func (adapter *CLIAdapter) normalizeMinecraftServerRequestWithRoot(request CreateMinecraftServerRequest, dockerRootDir string) CreateMinecraftServerRequest {
+	request = NormalizeMinecraftServerRequest(request)
+	if !isSnapDockerRoot(dockerRootDir) {
+		return request
+	}
+
+	if request.GameTemplateID != "minecraft-java" || strings.TrimSpace(request.ContainerName) == "" {
+		return request
+	}
+
+	if shouldUseSnapSafeVolumePath(request.VolumePath) {
+		request.VolumePath = buildHomeVolumePath(request.SSHUser, "minecraft", request.ContainerName)
+	}
+
+	return request
+}
+
 func NormalizeMinecraftServerRequest(request CreateMinecraftServerRequest) CreateMinecraftServerRequest {
 	if strings.TrimSpace(request.VolumePath) != "" {
 		request.VolumePath = cleanManagedVolumePath(request.VolumePath)
@@ -321,7 +354,12 @@ func ensureManagedVolumePath(volumePath string) error {
 
 func isSafeManagedVolumePath(volumePath string) bool {
 	normalized := cleanManagedVolumePath(volumePath)
-	return strings.HasPrefix(normalized, "/remote-game-server/volume/") && len(strings.Split(strings.Trim(normalized, "/"), "/")) >= 4
+	if strings.HasPrefix(normalized, "/remote-game-server/volume/") && len(strings.Split(strings.Trim(normalized, "/"), "/")) >= 4 {
+		return true
+	}
+
+	parts := strings.Split(strings.Trim(normalized, "/"), "/")
+	return len(parts) >= 5 && parts[0] == "home" && parts[2] == "remote-game-server" && parts[3] == "volume"
 }
 
 func cleanManagedVolumePath(volumePath string) string {
@@ -350,6 +388,24 @@ func sanitizePathSegment(value string) string {
 	}
 
 	return result
+}
+
+func isSnapDockerRoot(dockerRootDir string) bool {
+	return strings.HasPrefix(cleanManagedVolumePath(dockerRootDir), "/var/snap/docker/")
+}
+
+func shouldUseSnapSafeVolumePath(volumePath string) bool {
+	normalized := cleanManagedVolumePath(volumePath)
+	return normalized == "." || normalized == "" || strings.HasPrefix(normalized, "/remote-game-server/volume/")
+}
+
+func buildHomeVolumePath(sshUser string, gameName string, serverName string) string {
+	user := sanitizePathSegment(sshUser)
+	if user == "server" {
+		user = "remote-game-server"
+	}
+
+	return "/home/" + user + "/remote-game-server/volume/" + sanitizePathSegment(gameName) + "/" + sanitizePathSegment(serverName)
 }
 
 func BuildContainerActionArgs(request ContainerActionRequest) ([]string, error) {

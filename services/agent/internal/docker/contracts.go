@@ -63,8 +63,10 @@ type ConsoleCommandResult struct {
 }
 
 type DockerStatus struct {
-	Available    bool   `json:"available"`
-	Mode         string `json:"mode"`
-	Message      string `json:"message"`
-	AgentVersion string `json:"agentVersion"`
+	Available     bool   `json:"available"`
+	Mode          string `json:"mode"`
+	Message       string `json:"message"`
+	AgentVersion  string `json:"agentVersion"`
+	DockerRootDir string `json:"dockerRootDir,omitempty"`
+	IsSnapDocker  bool   `json:"isSnapDocker"`
 }
