@@ -414,6 +414,12 @@ button {
   width: 100%;
 }
 
+.formActions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
 .dataTable {
   width: 100%;
   border-collapse: collapse;

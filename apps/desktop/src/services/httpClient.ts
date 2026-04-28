@@ -1,5 +1,21 @@
-export async function getJSON<TResponse>(url: string): Promise<TResponse> {
-  const response = await fetch(url);
+interface RequestOptions {
+  token?: string;
+}
+
+function authHeaders(options?: RequestOptions) {
+  if (!options?.token) {
+    return undefined;
+  }
+
+  return {
+    Authorization: `Bearer ${options.token}`
+  };
+}
+
+export async function getJSON<TResponse>(url: string, options?: RequestOptions): Promise<TResponse> {
+  const response = await fetch(url, {
+    headers: authHeaders(options)
+  });
 
   if (!response.ok) {
     throw new Error(`Request failed with status ${response.status}`);
@@ -8,11 +24,16 @@ export async function getJSON<TResponse>(url: string): Promise<TResponse> {
   return (await response.json()) as TResponse;
 }
 
-export async function postJSON<TResponse, TPayload>(url: string, payload: TPayload): Promise<TResponse> {
+export async function postJSON<TResponse, TPayload>(
+  url: string,
+  payload: TPayload,
+  options?: RequestOptions
+): Promise<TResponse> {
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...authHeaders(options)
     },
     body: JSON.stringify(payload)
   });

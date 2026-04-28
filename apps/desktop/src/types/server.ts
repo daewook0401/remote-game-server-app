@@ -11,6 +11,8 @@ export interface ManagedServer {
   sshHost?: string;
   sshPort?: number;
   sshUser?: string;
+  sshKeyPath?: string;
+  agentToken?: string;
   status: ServerStatus;
   agentStatus: "connected" | "notInstalled" | "offline";
   dockerStatus: "ready" | "needsSetup" | "unknown";
@@ -43,7 +45,9 @@ export interface ServerRegistrationForm {
   sshHost: string;
   sshPort: number;
   sshUser: string;
+  sshKeyPath: string;
   agentBaseUrl: string;
+  agentToken: string;
 }
 
 export interface ContainerSummary {

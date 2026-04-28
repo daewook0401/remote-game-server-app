@@ -14,40 +14,46 @@ function agentUrl(path: string, baseUrl = AGENT_BASE_URL) {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
 }
 
-export function getDockerStatus(baseUrl?: string): Promise<DockerStatusResponse> {
-  return getJSON<DockerStatusResponse>(agentUrl("/docker/status", baseUrl));
+export function getDockerStatus(baseUrl?: string, token?: string): Promise<DockerStatusResponse> {
+  return getJSON<DockerStatusResponse>(agentUrl("/docker/status", baseUrl), { token });
 }
 
-export function listManagedContainers(baseUrl?: string): Promise<ContainerSummaryResponse[]> {
-  return getJSON<ContainerSummaryResponse[]>(agentUrl("/docker/containers", baseUrl));
+export function listManagedContainers(baseUrl?: string, token?: string): Promise<ContainerSummaryResponse[]> {
+  return getJSON<ContainerSummaryResponse[]>(agentUrl("/docker/containers", baseUrl), { token });
 }
 
 export function createMinecraftServer(
   payload: CreateMinecraftServerRequest,
-  baseUrl?: string
+  baseUrl?: string,
+  token?: string
 ): Promise<ContainerSummaryResponse> {
   return postJSON<ContainerSummaryResponse, CreateMinecraftServerRequest>(
     agentUrl("/docker/minecraft", baseUrl),
-    payload
+    payload,
+    { token }
   );
 }
 
 export function applyContainerAction(
   payload: ContainerActionRequest,
-  baseUrl?: string
+  baseUrl?: string,
+  token?: string
 ): Promise<ContainerSummaryResponse> {
   return postJSON<ContainerSummaryResponse, ContainerActionRequest>(
     agentUrl("/docker/containers/action", baseUrl),
-    payload
+    payload,
+    { token }
   );
 }
 
 export function getConsoleSnapshot(
   payload: ConsoleAttachRequest,
-  baseUrl?: string
+  baseUrl?: string,
+  token?: string
 ): Promise<ConsoleSnapshotResponse> {
   return postJSON<ConsoleSnapshotResponse, ConsoleAttachRequest>(
     agentUrl("/docker/containers/console", baseUrl),
-    payload
+    payload,
+    { token }
   );
 }

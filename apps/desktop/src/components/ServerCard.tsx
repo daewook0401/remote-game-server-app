@@ -30,6 +30,10 @@ export function ServerCard({ isSelected, onCheck, onSelect, server }: ServerCard
           <dd>{server.agentBaseUrl}</dd>
         </div>
         <div>
+          <dt>SSH key</dt>
+          <dd>{server.sshKeyPath || "-"}</dd>
+        </div>
+        <div>
           <dt>Agent</dt>
           <dd>{server.agentStatus}</dd>
         </div>

@@ -22,9 +22,31 @@ Desktop은 등록된 서버마다 다음 정보를 가진다.
 - 서버 이름
 - 서버 유형: `local`, `remote`, `cloud`
 - SSH 접속 정보: host, port, user
+- SSH key path
 - Agent URL: 예시 `http://127.0.0.1:18080`
+- Agent token
 - Agent 상태
 - Docker 준비 상태
+
+## 로컬 저장 기준
+
+Electron 실행 환경에서는 등록된 서버 목록을 앱의 `userData` 경로 아래 `servers.json`에 저장한다.
+
+브라우저 개발 환경에서는 Electron preload API가 없으므로 `localStorage` fallback을 사용한다.
+
+현재 저장 대상:
+
+- 서버 이름
+- 서버 유형
+- SSH host/port/user/key path
+- Agent URL
+- Agent token
+- 마지막 Agent/Docker 상태
+
+주의:
+
+- 현재 MVP 저장소는 JSON 기반이다.
+- Agent token과 SSH key path는 민감 정보에 가깝기 때문에, 배포 단계에서는 OS 보안 저장소 또는 암호화 저장소로 옮기는 것이 맞다.
 
 ## Agent 연결 방식
 
@@ -54,9 +76,35 @@ Desktop
 
 요청 payload에는 선택된 서버 기준의 `serverId`, `targetType`, SSH 정보가 포함된다. 장기적으로 SSH 정보는 Agent 설치/부트스트랩 단계에서 사용하고, Docker 제어는 Agent API를 통해 유지한다.
 
+## SSH 연결 테스트 기준
+
+SSH 서버 정보는 사용자가 입력한다.
+
+필수 입력:
+
+- SSH host
+- SSH port
+- SSH user
+
+선택 입력:
+
+- SSH key path
+
+현재 단계에서는 UI에서 SSH 입력값이 준비됐는지만 확인한다. 실제 SSH 접속 테스트는 다음 단계에서 Electron main process IPC로 실행한다.
+
+권장 흐름:
+
+```text
+Renderer UI
+-> ssh:test IPC
+-> Electron main process
+-> ssh 명령 또는 Node SSH 라이브러리 실행
+-> Docker/Agent 설치 여부 확인
+-> Renderer UI에 결과 표시
+```
+
 ## 다음 구현 후보
 
-- 서버 등록 정보를 로컬 저장소에 영구 저장한다.
 - SSH 연결 테스트와 Agent 설치 스크립트 안내를 추가한다.
 - 클라우드 서버 생성 버튼은 provider별 플러그인 또는 Terraform/CLI 가이드로 분리한다.
-- 원격 Agent가 CORS 또는 인증 설정을 갖도록 Agent 설정 모델을 추가한다.
+- Agent token을 OS 보안 저장소 또는 암호화 저장소로 옮긴다.

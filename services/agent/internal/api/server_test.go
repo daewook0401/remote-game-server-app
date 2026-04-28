@@ -143,3 +143,28 @@ func TestDockerStatus(t *testing.T) {
 		t.Fatalf("unexpected docker status: %+v", status)
 	}
 }
+
+func TestDockerStatusRequiresTokenWhenConfigured(t *testing.T) {
+	server := NewServerWithToken(docker.NewMemoryService(), "secret-token")
+	request := httptest.NewRequest(http.MethodGet, "/docker/status", nil)
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", response.Code)
+	}
+}
+
+func TestDockerStatusAcceptsBearerToken(t *testing.T) {
+	server := NewServerWithToken(docker.NewMemoryService(), "secret-token")
+	request := httptest.NewRequest(http.MethodGet, "/docker/status", nil)
+	request.Header.Set("Authorization", "Bearer secret-token")
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", response.Code)
+	}
+}

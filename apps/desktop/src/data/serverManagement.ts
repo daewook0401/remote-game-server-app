@@ -7,6 +7,7 @@ export const managedServers: ManagedServer[] = [
     targetType: "local",
     host: "localhost",
     agentBaseUrl: "http://127.0.0.1:18080",
+    agentToken: "",
     status: "connected",
     agentStatus: "connected",
     dockerStatus: "ready"
@@ -20,6 +21,8 @@ export const managedServers: ManagedServer[] = [
     sshHost: "203.0.113.10",
     sshPort: 22,
     sshUser: "ec2-user",
+    sshKeyPath: "",
+    agentToken: "",
     status: "setupRequired",
     agentStatus: "notInstalled",
     dockerStatus: "unknown"

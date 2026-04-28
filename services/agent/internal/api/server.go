@@ -9,10 +9,15 @@ import (
 
 type Server struct {
 	dockerService *docker.Service
+	agentToken    string
 }
 
 func NewServer(dockerService *docker.Service) *Server {
-	return &Server{dockerService: dockerService}
+	return NewServerWithToken(dockerService, "")
+}
+
+func NewServerWithToken(dockerService *docker.Service, agentToken string) *Server {
+	return &Server{dockerService: dockerService, agentToken: agentToken}
 }
 
 func (server *Server) Routes() http.Handler {
@@ -23,7 +28,7 @@ func (server *Server) Routes() http.Handler {
 	mux.HandleFunc("/docker/minecraft", server.handleCreateMinecraft)
 	mux.HandleFunc("/docker/containers/action", server.handleContainerAction)
 	mux.HandleFunc("/docker/containers/console", server.handleConsoleSnapshot)
-	return withCORS(mux)
+	return withCORS(server.withAuth(mux))
 }
 
 func (server *Server) handleHealth(writer http.ResponseWriter, request *http.Request) {
@@ -122,10 +127,26 @@ func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Access-Control-Allow-Origin", "http://127.0.0.1:5173")
 		writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 
 		if request.Method == http.MethodOptions {
 			writer.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(writer, request)
+	})
+}
+
+func (server *Server) withAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if server.agentToken == "" || request.URL.Path == "/healthz" || request.Method == http.MethodOptions {
+			next.ServeHTTP(writer, request)
+			return
+		}
+
+		if request.Header.Get("Authorization") != "Bearer "+server.agentToken {
+			http.Error(writer, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 

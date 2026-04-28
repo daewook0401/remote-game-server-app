@@ -4,6 +4,7 @@ interface ServerRegistrationPanelProps {
   form: ServerRegistrationForm;
   onChange: (form: ServerRegistrationForm) => void;
   onSubmit: () => void;
+  onTestSSH: () => void;
 }
 
 const targetOptions: Array<{ label: string; value: ServerTargetType }> = [
@@ -15,7 +16,8 @@ const targetOptions: Array<{ label: string; value: ServerTargetType }> = [
 export function ServerRegistrationPanel({
   form,
   onChange,
-  onSubmit
+  onSubmit,
+  onTestSSH
 }: ServerRegistrationPanelProps) {
   function update<T extends keyof ServerRegistrationForm>(key: T, value: ServerRegistrationForm[T]) {
     onChange({ ...form, [key]: value });
@@ -63,6 +65,17 @@ export function ServerRegistrationPanel({
             value={form.agentBaseUrl}
           />
         </label>
+
+        <label className="fieldGroup">
+          <span>Agent token</span>
+          <input
+            className="textInput"
+            onChange={(event) => update("agentToken", event.target.value)}
+            placeholder="AGENT_TOKEN"
+            type="password"
+            value={form.agentToken}
+          />
+        </label>
       </div>
 
       {needsSSH ? (
@@ -94,12 +107,28 @@ export function ServerRegistrationPanel({
               value={form.sshUser}
             />
           </label>
+          <label className="fieldGroup">
+            <span>SSH key path</span>
+            <input
+              className="textInput"
+              onChange={(event) => update("sshKeyPath", event.target.value)}
+              placeholder="C:\\Users\\me\\.ssh\\id_rsa"
+              value={form.sshKeyPath}
+            />
+          </label>
         </div>
       ) : null}
 
-      <button className="secondaryButton fullWidthButton" onClick={onSubmit} type="button">
-        서버 등록
-      </button>
+      <div className="formActions">
+        {needsSSH ? (
+          <button className="secondaryButton fullWidthButton" onClick={onTestSSH} type="button">
+            SSH 입력 확인
+          </button>
+        ) : null}
+        <button className="secondaryButton fullWidthButton" onClick={onSubmit} type="button">
+          서버 등록
+        </button>
+      </div>
     </article>
   );
 }
