@@ -25,6 +25,7 @@ import type {
   ManagedServer,
   ServerCreateForm,
   ServerCreateReadiness,
+  FirewallOpenPortRequest,
   ServerOsType,
   ServerRegistrationForm
 } from "../types/server";
@@ -152,19 +153,15 @@ export function ServerManagementPage() {
       return;
     }
 
-    if (isCliMode && !pendingCreate) {
+    if (!pendingCreate) {
       setPendingCreate(true);
       setNoticeKind("warning");
-      setMessage("Docker CLI mode입니다. 서버 생성을 다시 누르면 실제 docker run을 요청합니다.");
+      setMessage(`서버 생성을 다시 누르면 게임 포트 ${createForm.externalPort}/tcp를 열고 Docker 컨테이너를 생성합니다.`);
       return;
     }
 
-    if (dockerStatus && !isCliMode) {
-      setNoticeKind("warning");
-      setMessage("현재 memory mode입니다. 실제 Docker 컨테이너는 생성되지 않습니다.");
-    }
-
     try {
+      await openGameFirewallPortIfNeeded(activeServer);
       const container = await createMinecraftServer({
         serverId: activeServer.id,
         targetType: activeServer.targetType,
@@ -184,8 +181,8 @@ export function ServerManagementPage() {
       void refreshContainers();
       updateServerAfterContainerCreate(activeServer.id);
       setPendingCreate(false);
-      setNoticeKind(isCliMode ? "success" : "warning");
-      setMessage(`${container.name} 생성 요청 성공`);
+      setNoticeKind("success");
+      setMessage(`${container.name} Docker 컨테이너 생성 완료`);
     } catch (error) {
       setPendingCreate(false);
       setNoticeKind("error");
@@ -203,7 +200,7 @@ export function ServerManagementPage() {
       if (action === "delete") {
         setContainers((current) => current.filter((item) => item.id !== containerId));
         setPendingAction(undefined);
-        setNoticeKind(isCliMode ? "success" : "warning");
+        setNoticeKind("success");
         setMessage(`${containerId} 삭제 요청 성공`);
         return;
       }
@@ -211,7 +208,7 @@ export function ServerManagementPage() {
       upsertContainer(container);
       void refreshContainers();
       setPendingAction(undefined);
-      setNoticeKind(isCliMode ? "success" : "warning");
+      setNoticeKind("success");
       setMessage(`${containerId} ${action} 요청 성공`);
     } catch (error) {
       setPendingAction(undefined);
@@ -224,8 +221,9 @@ export function ServerManagementPage() {
     containerId: string,
     action: ContainerActionRequest["action"]
   ) {
-    if (!isCliMode && action !== "delete") {
-      void handleContainerAction(containerId, action);
+    if (!isCliMode) {
+      setNoticeKind("error");
+      setMessage("Docker CLI 연결이 확인된 뒤 컨테이너 작업을 실행할 수 있습니다.");
       return;
     }
 
@@ -530,6 +528,43 @@ export function ServerManagementPage() {
     }
   }
 
+  async function openGameFirewallPortIfNeeded(server: ManagedServer) {
+    if (server.targetType === "local") {
+      return;
+    }
+
+    const request = buildPasswordFirewallRequest(server, createForm.externalPort);
+    if (!request) {
+      throw new Error("게임 포트를 자동으로 열려면 선택된 서버와 같은 SSH host를 password 방식으로 입력해야 합니다.");
+    }
+
+    await openRemoteFirewallPort(request);
+  }
+
+  function buildPasswordFirewallRequest(server: ManagedServer, firewallPort: number): FirewallOpenPortRequest | undefined {
+    if (!server.sshHost || !server.sshUser) {
+      return undefined;
+    }
+
+    const sameHost = registrationForm.sshHost === server.sshHost;
+    const sameUser = registrationForm.sshUser === server.sshUser;
+    if (!sameHost || !sameUser || registrationForm.sshAuthMethod !== "password" || !registrationForm.sshPassword) {
+      return undefined;
+    }
+
+    return {
+      host: server.sshHost,
+      port: server.sshPort ?? registrationForm.sshPort,
+      username: server.sshUser,
+      authMethod: "password",
+      password: registrationForm.sshPassword,
+      expectedOs: server.osType,
+      sudoPassword: registrationForm.sshPassword,
+      protocol: "tcp",
+      firewallPort
+    };
+  }
+
   function getAgentPort(agentBaseUrl: string) {
     try {
       const url = new URL(agentBaseUrl);
@@ -829,22 +864,10 @@ export function ServerManagementPage() {
         </article>
       </section>
 
-      <article className={isCliMode ? "safetyPanel cli" : "safetyPanel"}>
-        <div>
-          <h2>{isCliMode ? "Docker CLI mode" : "Memory mode"}</h2>
-          <p>
-            {isCliMode
-              ? "서버 생성과 컨테이너 작업이 실제 Docker 명령으로 실행될 수 있습니다."
-              : "현재는 안전한 테스트 모드입니다. 서버 생성은 Agent API 흐름만 확인하고 실제 Docker 컨테이너를 만들지 않습니다."}
-          </p>
-        </div>
-        <code>{isCliMode ? "AGENT_DOCKER_MODE=cli" : "AGENT_DOCKER_MODE not set"}</code>
-      </article>
-
       {pendingCreate ? (
         <article className="confirmPanel">
-          <h2>실제 Docker 생성 확인</h2>
-          <p>다시 `서버 생성`을 누르면 Agent가 Docker CLI adapter를 통해 Minecraft 컨테이너 생성을 요청합니다.</p>
+          <h2>게임 포트와 Docker 생성 확인</h2>
+          <p>다시 `서버 생성`을 누르면 게임 포트를 열고 Agent가 Docker CLI로 Minecraft 컨테이너를 생성합니다.</p>
         </article>
       ) : null}
 
