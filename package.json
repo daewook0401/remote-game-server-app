@@ -7,8 +7,8 @@
   ],
   "scripts": {
     "desktop:dev": "npm run dev -w apps/desktop",
+    "desktop:electron": "npm run build -w apps/desktop && npm exec -w apps/desktop electron .",
     "desktop:build": "npm run build -w apps/desktop",
     "desktop:typecheck": "npm run typecheck -w apps/desktop"
   }
 }
-
