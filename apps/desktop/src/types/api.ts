@@ -41,6 +41,7 @@ export interface DockerStatusResponse {
   available: boolean;
   mode: "memory" | "cli";
   message: string;
+  agentVersion?: string;
 }
 
 export interface RelayPortAllocationResponse {

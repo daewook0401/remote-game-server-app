@@ -139,7 +139,7 @@ func TestDockerStatus(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if !status.Available || status.Mode != "memory" {
+	if !status.Available || status.Mode != "memory" || status.AgentVersion == "" {
 		t.Fatalf("unexpected docker status: %+v", status)
 	}
 }

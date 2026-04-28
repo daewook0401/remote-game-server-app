@@ -48,7 +48,8 @@ type ConsoleSnapshot struct {
 }
 
 type DockerStatus struct {
-	Available bool   `json:"available"`
-	Mode      string `json:"mode"`
-	Message   string `json:"message"`
+	Available    bool   `json:"available"`
+	Mode         string `json:"mode"`
+	Message      string `json:"message"`
+	AgentVersion string `json:"agentVersion"`
 }

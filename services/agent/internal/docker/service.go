@@ -1,5 +1,7 @@
 package docker
 
+const AgentVersion = "0.1.1"
+
 type Service struct {
 	adapter Adapter
 }
@@ -13,7 +15,9 @@ func NewMemoryService() *Service {
 }
 
 func (service *Service) Status() DockerStatus {
-	return service.adapter.Status()
+	status := service.adapter.Status()
+	status.AgentVersion = AgentVersion
+	return status
 }
 
 func (service *Service) ListManagedContainers() ([]ContainerSummary, error) {

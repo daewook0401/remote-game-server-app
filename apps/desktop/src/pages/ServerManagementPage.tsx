@@ -11,6 +11,7 @@ import { gameTemplates, managedServers as initialManagedServers } from "../data/
 import {
   applyContainerAction,
   createMinecraftServer,
+  EXPECTED_AGENT_VERSION,
   getDockerStatus,
   listManagedContainers
 } from "../services/agentClient";
@@ -74,6 +75,7 @@ export function ServerManagementPage() {
   const activeAgentBaseUrl = activeServer?.agentBaseUrl;
   const activeAgentToken = activeServer?.agentToken;
   const isCliMode = dockerStatus?.mode === "cli";
+  const isAgentVersionCurrent = dockerStatus?.agentVersion === EXPECTED_AGENT_VERSION;
   const createReadiness = buildCreateReadiness();
 
   useEffect(() => {
@@ -245,8 +247,13 @@ export function ServerManagementPage() {
       const managedContainers = await listManagedContainers(activeServer.agentBaseUrl, activeServer.agentToken);
       setContainers(managedContainers);
       updateServerStatus(activeServer.id, status, true);
-      setNoticeKind(status.mode === "cli" ? "success" : "warning");
-      setMessage(`${activeServer.name} Agent 확인 완료: ${status.mode} mode, 컨테이너 ${managedContainers.length}개`);
+      const versionCurrent = status.agentVersion === EXPECTED_AGENT_VERSION;
+      setNoticeKind(versionCurrent && status.mode === "cli" ? "success" : "warning");
+      setMessage(
+        versionCurrent
+          ? `${activeServer.name} Agent 상태 확인 완료: ${status.mode} mode, 컨테이너 ${managedContainers.length}개`
+          : `${activeServer.name} Agent 업데이트 필요: 현재 ${status.agentVersion ?? "확인 불가"}, 필요 ${EXPECTED_AGENT_VERSION}`
+      );
     } catch (error) {
       setDockerStatus(undefined);
       updateServerOffline(activeServer.id);
@@ -615,6 +622,7 @@ export function ServerManagementPage() {
     const selectedServer = Boolean(activeServer);
     const agentChecked = Boolean(dockerStatus?.available);
     const dockerReady = dockerStatus?.mode === "cli";
+    const agentVersionReady = isAgentVersionCurrent;
     const hasServerName = createForm.serverName.trim().length > 0;
     const validPorts = createForm.internalPort > 0 && createForm.externalPort > 0;
     const eulaAccepted = createForm.eulaAccepted;
@@ -623,6 +631,7 @@ export function ServerManagementPage() {
     const items = [
       { label: "서버 선택", ok: selectedServer },
       { label: "Agent 상태 확인", ok: agentChecked },
+      { label: `Agent 버전 ${EXPECTED_AGENT_VERSION}`, ok: agentVersionReady },
       { label: "실제 Docker mode", ok: dockerReady },
       { label: "원격/클라우드 Agent 연결", ok: Boolean(targetReady) },
       { label: "서버 이름 입력", ok: hasServerName },
@@ -631,7 +640,7 @@ export function ServerManagementPage() {
     ];
 
     const canCreate =
-      selectedServer && agentChecked && dockerReady && hasServerName && validPorts && eulaAccepted && Boolean(targetReady);
+      selectedServer && agentChecked && agentVersionReady && dockerReady && hasServerName && validPorts && eulaAccepted && Boolean(targetReady);
 
     if (!selectedServer) {
       return { canCreate: false, items, message: "서버를 먼저 선택하세요." };
@@ -639,6 +648,10 @@ export function ServerManagementPage() {
 
     if (!agentChecked) {
       return { canCreate: false, items, message: "Agent 상태 확인을 먼저 실행하세요." };
+    }
+
+    if (!agentVersionReady) {
+      return { canCreate: false, items, message: "Agent 버전이 다릅니다. Agent 설치/업데이트를 실행하세요." };
     }
 
     if (!dockerReady) {
@@ -808,7 +821,7 @@ export function ServerManagementPage() {
               ...server,
               status: isConnected ? "connected" : "setupRequired",
               agentStatus: isConnected ? "connected" : "offline",
-              dockerStatus: status.mode === "cli" ? "ready" : "needsSetup"
+              dockerStatus: status.mode === "cli" && status.agentVersion === EXPECTED_AGENT_VERSION ? "ready" : "needsSetup"
             }
           : server
       )

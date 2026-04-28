@@ -189,7 +189,7 @@ export function ServerRegistrationPanel({
               SSH 확인
             </button>
             <button className="primaryButton fullWidthButton" onClick={onPrepareAgent} type="button">
-              Agent 준비
+              Agent 설치/업데이트
             </button>
             <button
               className={isFirewallConfirming ? "secondaryButton fullWidthButton warningButton" : "secondaryButton fullWidthButton"}
