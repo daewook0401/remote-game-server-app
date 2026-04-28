@@ -48,6 +48,7 @@ func (adapter *MemoryAdapter) CreateMinecraftServer(request CreateMinecraftServe
 		Status:     "running",
 		Port:       request.ExternalPort,
 		InstanceID: request.InstanceID,
+		VolumePath: request.VolumePath,
 	}
 
 	adapter.containers[container.ID] = container

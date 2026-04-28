@@ -17,6 +17,7 @@ func TestCreateMinecraftServerRequestRequiresEula(t *testing.T) {
 		ExternalPort:   25565,
 		Memory:         "2G",
 		EulaAccepted:   true,
+		VolumePath:     "/remote-game-server/volume/minecraft/minecraft-survival",
 	}
 
 	if !request.EulaAccepted {
@@ -49,6 +50,7 @@ func TestBuildMinecraftRunArgs(t *testing.T) {
 		ExternalPort:   25565,
 		Memory:         "2G",
 		EulaAccepted:   true,
+		VolumePath:     "/remote-game-server/volume/minecraft/minecraft-survival",
 	}
 
 	args := BuildMinecraftRunArgs(request)
@@ -60,9 +62,11 @@ func TestBuildMinecraftRunArgs(t *testing.T) {
 		"--name minecraft-survival",
 		"--label remote-game-server.managed=true",
 		"--label remote-game-server.instanceId=instance-1",
+		"--label remote-game-server.volumePath=/remote-game-server/volume/minecraft/minecraft-survival",
 		"-e EULA=TRUE",
 		"-e MEMORY=2G",
 		"-p 25565:25565",
+		"-v /remote-game-server/volume/minecraft/minecraft-survival:/data",
 		"itzg/minecraft-server",
 	}
 
@@ -82,6 +86,7 @@ func TestBuildManagedContainerListArgs(t *testing.T) {
 		"--filter label=remote-game-server.managed=true",
 		"--format",
 		"remote-game-server.instanceId",
+		"remote-game-server.volumePath",
 	}
 
 	for _, expected := range expectedParts {
@@ -92,7 +97,7 @@ func TestBuildManagedContainerListArgs(t *testing.T) {
 }
 
 func TestParseManagedContainerRows(t *testing.T) {
-	output := []byte("abc123\tminecraft-survival\titzg/minecraft-server\tUp 3 minutes\t0.0.0.0:25565->25565/tcp\tinstance-1\n")
+	output := []byte("abc123\tminecraft-survival\titzg/minecraft-server\tUp 3 minutes\t0.0.0.0:25565->25565/tcp\tinstance-1\t/remote-game-server/volume/minecraft/minecraft-survival\n")
 	containers := ParseManagedContainerRows(output)
 
 	if len(containers) != 1 {
@@ -100,8 +105,18 @@ func TestParseManagedContainerRows(t *testing.T) {
 	}
 
 	container := containers[0]
-	if container.ID != "abc123" || container.Name != "minecraft-survival" || container.Status != "running" || container.Port != 25565 || container.InstanceID != "instance-1" {
+	if container.ID != "abc123" || container.Name != "minecraft-survival" || container.Status != "running" || container.Port != 25565 || container.InstanceID != "instance-1" || container.VolumePath != "/remote-game-server/volume/minecraft/minecraft-survival" {
 		t.Fatalf("unexpected parsed container: %+v", container)
+	}
+}
+
+func TestManagedVolumePathSafety(t *testing.T) {
+	if !isSafeManagedVolumePath("/remote-game-server/volume/minecraft/minecraft-survival") {
+		t.Fatal("expected managed volume path to be safe")
+	}
+
+	if isSafeManagedVolumePath("/var/lib/docker") {
+		t.Fatal("expected unmanaged path to be rejected")
 	}
 }
 

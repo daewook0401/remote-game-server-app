@@ -41,6 +41,7 @@ export function ServerRegistrationPanel({
   }
 
   const needsSSH = form.targetType !== "local";
+  const derivedAgentUrl = needsSSH;
 
   return (
     <article className="panel widePanel">
@@ -91,9 +92,10 @@ export function ServerRegistrationPanel({
         <label className="fieldGroup">
           <span>Agent URL</span>
           <input
-            className="textInput"
+            className={derivedAgentUrl ? "textInput readonlyInput" : "textInput"}
             onChange={(event) => update("agentBaseUrl", event.target.value)}
             placeholder="http://127.0.0.1:18080"
+            readOnly={derivedAgentUrl}
             value={form.agentBaseUrl}
           />
         </label>

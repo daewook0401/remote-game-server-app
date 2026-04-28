@@ -34,6 +34,14 @@ import type {
 } from "../types/server";
 
 type NoticeKind = "info" | "success" | "warning" | "error";
+type DeleteTarget = {
+  container: ContainerSummary;
+  deleteData: boolean;
+  confirmation: string;
+};
+
+const AGENT_PORT = 18080;
+const PRODUCT_VOLUME_ROOT = "/remote-game-server/volume";
 
 export function ServerManagementPage() {
   const [message, setMessage] = useState("Agent API 대기");
@@ -71,6 +79,9 @@ export function ServerManagementPage() {
   });
   const [pendingCreate, setPendingCreate] = useState(false);
   const [pendingAction, setPendingAction] = useState<ContainerActionRequest>();
+  const [createConfirmModalOpen, setCreateConfirmModalOpen] = useState(false);
+  const [createSudoPassword, setCreateSudoPassword] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>();
   const [pendingFirewallOpen, setPendingFirewallOpen] = useState(false);
   const [agentUpdateModalOpen, setAgentUpdateModalOpen] = useState(false);
   const [agentUpdatePassword, setAgentUpdatePassword] = useState("");
@@ -94,12 +105,14 @@ export function ServerManagementPage() {
       text: message
     };
     setToasts((current) => [...current.slice(-2), toast]);
-    const timer = window.setTimeout(() => {
+    window.setTimeout(() => {
       setToasts((current) => current.filter((item) => item.id !== toast.id));
     }, 3600);
-
-    return () => window.clearTimeout(timer);
   }, [message, noticeKind]);
+
+  function dismissToast(id: number) {
+    setToasts((current) => current.filter((item) => item.id !== id));
+  }
 
   useEffect(() => {
     let ignore = false;
@@ -179,15 +192,26 @@ export function ServerManagementPage() {
       return;
     }
 
-    if (!pendingCreate) {
-      setPendingCreate(true);
-      setNoticeKind("warning");
-      setMessage(`서버 생성을 다시 누르면 게임 포트 ${createForm.externalPort}/tcp를 열고 Docker 컨테이너를 생성합니다.`);
+    setCreateSudoPassword("");
+    setCreateConfirmModalOpen(true);
+  }
+
+  async function runCreateServer(sudoPassword?: string) {
+    if (!activeServer) {
+      setNoticeKind("error");
+      setMessage("서버를 먼저 선택해야 합니다.");
+      return;
+    }
+
+    const template = gameTemplates.find((item) => item.id === createForm.gameTemplateId);
+    if (!template) {
+      setNoticeKind("error");
+      setMessage("선택한 게임 템플릿을 찾을 수 없습니다.");
       return;
     }
 
     try {
-      await openGameFirewallPortIfNeeded(activeServer);
+      await openGameFirewallPortIfNeeded(activeServer, sudoPassword);
       const container = await createMinecraftServer({
         serverId: activeServer.id,
         targetType: activeServer.targetType,
@@ -198,19 +222,23 @@ export function ServerManagementPage() {
         instanceId: `${template.id}-${createForm.serverName}`,
         containerName: createForm.serverName,
         image: template.image,
-        internalPort: createForm.internalPort,
+        internalPort: template.defaultPort,
         externalPort: createForm.externalPort,
         memory: createForm.memory,
-        eulaAccepted: createForm.eulaAccepted
+        eulaAccepted: createForm.eulaAccepted,
+        volumePath: buildVolumePath(template.id, createForm.serverName)
       }, activeAgentBaseUrl, activeAgentToken);
       upsertContainer(container);
       void refreshContainers();
       updateServerAfterContainerCreate(activeServer.id);
       setPendingCreate(false);
+      setCreateConfirmModalOpen(false);
+      setCreateSudoPassword("");
       setNoticeKind("success");
       setMessage(`${container.name} Docker 컨테이너 생성 완료`);
     } catch (error) {
       setPendingCreate(false);
+      setCreateConfirmModalOpen(false);
       setNoticeKind("error");
       setMessage(error instanceof Error ? error.message : "Agent 요청 실패");
     }
@@ -253,9 +281,59 @@ export function ServerManagementPage() {
       return;
     }
 
+    if (action === "delete") {
+      const container = containers.find((item) => item.id === containerId);
+      if (!container) {
+        setNoticeKind("error");
+        setMessage("삭제할 컨테이너를 찾을 수 없습니다.");
+        return;
+      }
+
+      setDeleteTarget({ container, deleteData: false, confirmation: "" });
+      return;
+    }
+
     setPendingAction({ containerId, action });
     setNoticeKind("warning");
     setMessage(`${containerId} ${action} 작업을 다시 누르면 Agent 요청을 보냅니다.`);
+  }
+
+  async function handleConfirmDeleteContainer() {
+    if (!deleteTarget) {
+      return;
+    }
+
+    if (deleteTarget.deleteData && deleteTarget.confirmation !== deleteTarget.container.name) {
+      setNoticeKind("error");
+      setMessage("전체 데이터 삭제를 진행하려면 서버 이름을 정확히 입력해야 합니다.");
+      return;
+    }
+
+    if (deleteTarget.deleteData && !deleteTarget.container.volumePath) {
+      setNoticeKind("error");
+      setMessage("이 컨테이너는 관리 볼륨 경로를 확인할 수 없어 전체 데이터 삭제를 자동으로 진행할 수 없습니다.");
+      return;
+    }
+
+    try {
+      await applyContainerAction({
+        containerId: deleteTarget.container.id,
+        action: "delete",
+        deleteData: deleteTarget.deleteData,
+        volumePath: deleteTarget.container.volumePath
+      }, activeAgentBaseUrl, activeAgentToken);
+      setContainers((current) => current.filter((item) => item.id !== deleteTarget.container.id));
+      setDeleteTarget(undefined);
+      setNoticeKind("success");
+      setMessage(
+        deleteTarget.deleteData
+          ? `${deleteTarget.container.name} 컨테이너와 전체 데이터를 삭제했습니다.`
+          : `${deleteTarget.container.name} 컨테이너를 삭제했습니다. 볼륨 데이터는 유지됩니다.`
+      );
+    } catch (error) {
+      setNoticeKind("error");
+      setMessage(error instanceof Error ? error.message : "컨테이너 삭제 요청 실패");
+    }
   }
 
   async function handleCheckAgent() {
@@ -305,7 +383,8 @@ export function ServerManagementPage() {
   }
 
   function handleRegisterServer() {
-    if (!registrationForm.name || !registrationForm.agentBaseUrl) {
+    const agentBaseUrl = buildAgentBaseUrl(registrationForm);
+    if (!registrationForm.name || !agentBaseUrl) {
       setNoticeKind("error");
       setMessage("서버 이름과 Agent URL이 필요합니다.");
       return;
@@ -326,7 +405,7 @@ export function ServerManagementPage() {
         registrationForm.targetType === "local"
           ? "localhost"
           : `${registrationForm.sshUser}@${registrationForm.sshHost}:${registrationForm.sshPort}`,
-      agentBaseUrl: registrationForm.agentBaseUrl,
+      agentBaseUrl,
       sshHost: registrationForm.sshHost || undefined,
       sshPort: registrationForm.targetType === "local" ? undefined : registrationForm.sshPort,
       sshUser: registrationForm.sshUser || undefined,
@@ -592,27 +671,28 @@ export function ServerManagementPage() {
     }
   }
 
-  async function openGameFirewallPortIfNeeded(server: ManagedServer) {
+  async function openGameFirewallPortIfNeeded(server: ManagedServer, sudoPassword?: string) {
     if (server.targetType === "local") {
       return;
     }
 
-    const request = buildPasswordFirewallRequest(server, createForm.externalPort);
+    const request = buildPasswordFirewallRequest(server, createForm.externalPort, sudoPassword);
     if (!request) {
-      throw new Error("게임 포트를 자동으로 열려면 선택된 서버와 같은 SSH host를 password 방식으로 입력해야 합니다.");
+      throw new Error("게임 포트를 자동으로 열려면 SSH 비밀번호를 입력해야 합니다. 비밀번호는 sudo 입력으로만 사용하고 저장하지 않습니다.");
     }
 
     await openRemoteFirewallPort(request);
   }
 
-  function buildPasswordFirewallRequest(server: ManagedServer, firewallPort: number): FirewallOpenPortRequest | undefined {
+  function buildPasswordFirewallRequest(server: ManagedServer, firewallPort: number, sudoPassword?: string): FirewallOpenPortRequest | undefined {
     if (!server.sshHost || !server.sshUser) {
       return undefined;
     }
 
     const sameHost = registrationForm.sshHost === server.sshHost;
     const sameUser = registrationForm.sshUser === server.sshUser;
-    if (!sameHost || !sameUser || registrationForm.sshAuthMethod !== "password" || !registrationForm.sshPassword) {
+    const password = sudoPassword || registrationForm.sshPassword;
+    if (!sameHost || !sameUser || !password) {
       return undefined;
     }
 
@@ -621,9 +701,9 @@ export function ServerManagementPage() {
       port: server.sshPort ?? registrationForm.sshPort,
       username: server.sshUser,
       authMethod: "password",
-      password: registrationForm.sshPassword,
+      password,
       expectedOs: server.osType,
-      sudoPassword: registrationForm.sshPassword,
+      sudoPassword: password,
       protocol: "tcp",
       firewallPort
     };
@@ -650,6 +730,37 @@ export function ServerManagementPage() {
     return undefined;
   }
 
+  function buildAgentBaseUrl(form: ServerRegistrationForm) {
+    if (form.targetType === "local") {
+      return form.agentBaseUrl || `http://127.0.0.1:${AGENT_PORT}`;
+    }
+
+    return form.sshHost ? `http://${form.sshHost}:${AGENT_PORT}` : "";
+  }
+
+  function handleRegistrationFormChange(nextForm: ServerRegistrationForm) {
+    setRegistrationForm({
+      ...nextForm,
+      agentBaseUrl: buildAgentBaseUrl(nextForm)
+    });
+  }
+
+  function buildVolumePath(gameTemplateId: string, serverName: string) {
+    const gameName = gameTemplateId === "minecraft-java" ? "minecraft" : gameTemplateId;
+    const safeServerName = serverName.trim().replace(/[^a-zA-Z0-9_.-]/g, "-") || "server";
+    return `${PRODUCT_VOLUME_ROOT}/${gameName}/${safeServerName}`;
+  }
+
+  async function handleConfirmCreateServer() {
+    if (activeServer?.targetType !== "local" && !createSudoPassword) {
+      setNoticeKind("error");
+      setMessage("원격 서버에서 게임 포트를 열려면 SSH 비밀번호가 필요합니다.");
+      return;
+    }
+
+    await runCreateServer(createSudoPassword);
+  }
+
   function buildServerFromRegistration(status: ManagedServer["lastAgentPrepareStatus"], message: string): ManagedServer {
     return {
       id: `${registrationForm.targetType}-${Date.now()}`,
@@ -660,7 +771,7 @@ export function ServerManagementPage() {
         registrationForm.targetType === "local"
           ? "localhost"
           : `${registrationForm.sshUser}@${registrationForm.sshHost}:${registrationForm.sshPort}`,
-      agentBaseUrl: registrationForm.agentBaseUrl,
+      agentBaseUrl: buildAgentBaseUrl(registrationForm),
       sshHost: registrationForm.sshHost || undefined,
       sshPort: registrationForm.targetType === "local" ? undefined : registrationForm.sshPort,
       sshUser: registrationForm.sshUser || undefined,
@@ -858,8 +969,9 @@ export function ServerManagementPage() {
   }
 
   function syncRegistrationFormFromServer(server: ManagedServer) {
-    setRegistrationForm((current) => ({
-      ...current,
+    setRegistrationForm((current) => {
+      const nextForm: ServerRegistrationForm = {
+        ...current,
       name: server.name,
       targetType: server.targetType,
       osType: server.osType,
@@ -869,10 +981,12 @@ export function ServerManagementPage() {
       sshAuthMethod: server.sshAuthMethod ?? "password",
       sshKeyPath: server.sshKeyPath ?? "",
       sshPassword: "",
-      agentBaseUrl: server.agentBaseUrl,
+        agentBaseUrl: server.sshHost ? `http://${server.sshHost}:${AGENT_PORT}` : server.agentBaseUrl,
       agentToken: server.agentToken ?? "",
       agentDownloadUrl: current.agentDownloadUrl
-    }));
+      };
+      return nextForm;
+    });
   }
 
   function handleDeleteServer(serverId: string) {
@@ -923,7 +1037,7 @@ export function ServerManagementPage() {
 
   return (
     <>
-      <ToastViewport messages={toasts} />
+      <ToastViewport messages={toasts} onDismiss={dismissToast} />
       <Topbar
         actionLabel="Agent 상태 확인"
         secondaryActionLabel="컨테이너 새로고침"
@@ -970,6 +1084,49 @@ export function ServerManagementPage() {
         onSubmit={handleCreateServer}
       />
 
+      {createConfirmModalOpen ? (
+        <AppModal onClose={() => setCreateConfirmModalOpen(false)} title="게임 서버 생성">
+          <p className="helperText">
+            Docker 컨테이너를 만들고 외부 공개 포트 {createForm.externalPort}/tcp를 엽니다. 원격 서버에서는 sudo 권한이 필요하며
+            입력한 SSH 비밀번호는 이번 작업에만 사용하고 저장하지 않습니다.
+          </p>
+          <dl className="detailList">
+            <div>
+              <dt>게임</dt>
+              <dd>{createForm.gameTemplateId === "minecraft-java" ? "Minecraft Java" : createForm.gameTemplateId}</dd>
+            </div>
+            <div>
+              <dt>포트</dt>
+              <dd>{createForm.externalPort} → {createForm.internalPort}</dd>
+            </div>
+            <div>
+              <dt>볼륨</dt>
+              <dd>{buildVolumePath(createForm.gameTemplateId, createForm.serverName)}</dd>
+            </div>
+          </dl>
+          {activeServer?.targetType !== "local" ? (
+            <label className="fieldGroup">
+              <span>SSH password</span>
+              <input
+                autoFocus
+                className="textInput"
+                onChange={(event) => setCreateSudoPassword(event.target.value)}
+                type="password"
+                value={createSudoPassword}
+              />
+            </label>
+          ) : null}
+          <div className="modalActions">
+            <button className="secondaryButton" onClick={() => setCreateConfirmModalOpen(false)} type="button">
+              취소
+            </button>
+            <button className="primaryButton" onClick={handleConfirmCreateServer} type="button">
+              생성
+            </button>
+          </div>
+        </AppModal>
+      ) : null}
+
       {pendingFirewallOpen ? (
         <article className="confirmPanel">
           <h2>sudo 관리자 권한 확인</h2>
@@ -983,7 +1140,7 @@ export function ServerManagementPage() {
       <ServerRegistrationPanel
         form={registrationForm}
         isFirewallConfirming={pendingFirewallOpen}
-        onChange={setRegistrationForm}
+        onChange={handleRegistrationFormChange}
         onOpenFirewallPort={handleOpenFirewallPort}
         onPrepareAgent={handlePrepareAgent}
         onUpdateAgent={handleRequestAgentUpdate}
@@ -1031,6 +1188,49 @@ export function ServerManagementPage() {
           />
         ))}
       </section>
+
+      {deleteTarget ? (
+        <AppModal onClose={() => setDeleteTarget(undefined)} title="게임 서버 삭제">
+          <p className="helperText">
+            삭제 방식을 선택하세요. 컨테이너만 삭제하면 맵 데이터와 설정 파일은 서버 볼륨에 남습니다.
+          </p>
+          <label className="checkRow">
+            <input
+              checked={!deleteTarget.deleteData}
+              onChange={() => setDeleteTarget({ ...deleteTarget, deleteData: false, confirmation: "" })}
+              type="radio"
+            />
+            컨테이너만 삭제하고 맵 데이터는 유지
+          </label>
+          <label className="checkRow">
+            <input
+              checked={deleteTarget.deleteData}
+              onChange={() => setDeleteTarget({ ...deleteTarget, deleteData: true })}
+              type="radio"
+            />
+            전체 데이터 삭제
+          </label>
+          {deleteTarget.deleteData ? (
+            <div className="dangerChoice">
+              <strong>맵 데이터, 설정, 로그가 모두 사라집니다.</strong>
+              <span>계속하려면 서버 이름 `{deleteTarget.container.name}`을 그대로 입력하세요.</span>
+              <input
+                className="textInput"
+                onChange={(event) => setDeleteTarget({ ...deleteTarget, confirmation: event.target.value })}
+                value={deleteTarget.confirmation}
+              />
+            </div>
+          ) : null}
+          <div className="modalActions">
+            <button className="secondaryButton" onClick={() => setDeleteTarget(undefined)} type="button">
+              취소
+            </button>
+            <button className="secondaryButton warningButton" onClick={handleConfirmDeleteContainer} type="button">
+              삭제
+            </button>
+          </div>
+        </AppModal>
+      ) : null}
 
       <ContainerTable
         containers={containers}

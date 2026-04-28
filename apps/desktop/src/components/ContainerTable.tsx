@@ -72,15 +72,11 @@ export function ContainerTable({
                       {isPending(container.id, "stop") ? "중지 확인" : "중지"}
                     </button>
                     <button
-                      className={isPending(container.id, "delete") ? "smallButton danger confirm" : "smallButton danger"}
-                      onClick={() =>
-                        isPending(container.id, "delete")
-                          ? onAction(container.id, "delete")
-                          : onRequestAction(container.id, "delete")
-                      }
+                      className="smallButton danger"
+                      onClick={() => onRequestAction(container.id, "delete")}
                       type="button"
                     >
-                      {isPending(container.id, "delete") ? "삭제 확인" : "삭제"}
+                      삭제
                     </button>
                   </div>
                 </td>

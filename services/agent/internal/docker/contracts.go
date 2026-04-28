@@ -14,11 +14,14 @@ type CreateMinecraftServerRequest struct {
 	ExternalPort   int    `json:"externalPort"`
 	Memory         string `json:"memory"`
 	EulaAccepted   bool   `json:"eulaAccepted"`
+	VolumePath     string `json:"volumePath,omitempty"`
 }
 
 type ContainerActionRequest struct {
 	ContainerID string          `json:"containerId"`
 	Action      ContainerAction `json:"action"`
+	DeleteData  bool            `json:"deleteData,omitempty"`
+	VolumePath  string          `json:"volumePath,omitempty"`
 }
 
 type ContainerAction string
@@ -40,6 +43,7 @@ type ContainerSummary struct {
 	Status     string `json:"status"`
 	Port       int    `json:"port"`
 	InstanceID string `json:"instanceId"`
+	VolumePath string `json:"volumePath,omitempty"`
 }
 
 type ConsoleSnapshot struct {

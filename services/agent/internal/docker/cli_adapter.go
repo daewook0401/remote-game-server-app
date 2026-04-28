@@ -71,6 +71,7 @@ func (adapter *CLIAdapter) CreateMinecraftServer(request CreateMinecraftServerRe
 		Status:     "running",
 		Port:       request.ExternalPort,
 		InstanceID: request.InstanceID,
+		VolumePath: request.VolumePath,
 	}
 	_ = adapter.upsertManagedState(container)
 	return container, nil
@@ -87,6 +88,11 @@ func (adapter *CLIAdapter) ApplyAction(request ContainerActionRequest) (Containe
 	}
 
 	if request.Action == ContainerActionDelete {
+		if request.DeleteData && request.VolumePath != "" {
+			if err := removeManagedVolumePath(request.VolumePath); err != nil {
+				return ContainerSummary{}, err
+			}
+		}
 		_ = adapter.removeManagedState(request.ContainerID)
 	}
 
@@ -190,12 +196,12 @@ func BuildManagedContainerListArgs() []string {
 		"ps",
 		"-a",
 		"--filter", "label=remote-game-server.managed=true",
-		"--format", "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Label \"remote-game-server.instanceId\"}}",
+		"--format", "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Label \"remote-game-server.instanceId\"}}\t{{.Label \"remote-game-server.volumePath\"}}",
 	}
 }
 
 func BuildMinecraftRunArgs(request CreateMinecraftServerRequest) []string {
-	return []string{
+	args := []string{
 		"run",
 		"-d",
 		"--name", request.ContainerName,
@@ -203,11 +209,18 @@ func BuildMinecraftRunArgs(request CreateMinecraftServerRequest) []string {
 		"--label", "remote-game-server.instanceId=" + request.InstanceID,
 		"--label", "remote-game-server.templateId=" + request.GameTemplateID,
 		"--label", "remote-game-server.targetType=" + request.TargetType,
+		"--label", "remote-game-server.volumePath=" + request.VolumePath,
 		"-e", "EULA=TRUE",
 		"-e", "MEMORY=" + request.Memory,
 		"-p", strconv.Itoa(request.ExternalPort) + ":" + strconv.Itoa(request.InternalPort),
-		request.Image,
 	}
+
+	if request.VolumePath != "" {
+		args = append(args, "-v", request.VolumePath+":/data")
+	}
+
+	args = append(args, request.Image)
+	return args
 }
 
 func ParseManagedContainerRows(output []byte) []ContainerSummary {
@@ -224,6 +237,10 @@ func ParseManagedContainerRows(output []byte) []ContainerSummary {
 		if len(columns) > 5 {
 			instanceID = columns[5]
 		}
+		volumePath := ""
+		if len(columns) > 6 {
+			volumePath = columns[6]
+		}
 
 		containers = append(containers, ContainerSummary{
 			ID:         columns[0],
@@ -232,10 +249,25 @@ func ParseManagedContainerRows(output []byte) []ContainerSummary {
 			Status:     normalizeDockerStatus(columns[3]),
 			Port:       parseDockerPort(columns[4]),
 			InstanceID: instanceID,
+			VolumePath: volumePath,
 		})
 	}
 
 	return containers
+}
+
+func removeManagedVolumePath(volumePath string) error {
+	cleanPath := filepath.Clean(volumePath)
+	if !isSafeManagedVolumePath(cleanPath) {
+		return errors.New("refusing to delete unmanaged volume path")
+	}
+
+	return os.RemoveAll(cleanPath)
+}
+
+func isSafeManagedVolumePath(volumePath string) bool {
+	normalized := filepath.ToSlash(filepath.Clean(volumePath))
+	return strings.HasPrefix(normalized, "/remote-game-server/volume/") && len(strings.Split(strings.Trim(normalized, "/"), "/")) >= 4
 }
 
 func BuildContainerActionArgs(request ContainerActionRequest) ([]string, error) {

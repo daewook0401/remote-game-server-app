@@ -120,6 +120,7 @@ export interface ContainerSummary {
   status: "running" | "stopped";
   port: number;
   instanceId?: string;
+  volumePath?: string;
 }
 
 export interface ServerCreateReadiness {

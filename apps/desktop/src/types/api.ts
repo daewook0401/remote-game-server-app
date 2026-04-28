@@ -12,11 +12,14 @@ export interface CreateMinecraftServerRequest {
   externalPort: number;
   memory: string;
   eulaAccepted: boolean;
+  volumePath?: string;
 }
 
 export interface ContainerActionRequest {
   containerId: string;
   action: "start" | "stop" | "delete";
+  deleteData?: boolean;
+  volumePath?: string;
 }
 
 export interface ConsoleAttachRequest {
@@ -30,6 +33,7 @@ export interface ContainerSummaryResponse {
   status: "running" | "stopped";
   port: number;
   instanceId: string;
+  volumePath?: string;
 }
 
 export interface ConsoleSnapshotResponse {

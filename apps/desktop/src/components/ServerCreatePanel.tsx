@@ -12,6 +12,14 @@ export function ServerCreatePanel({ disabled, form, onChange, onSubmit }: Server
     onChange({ ...form, [key]: value });
   }
 
+  function handleGameChange(gameTemplateId: string) {
+    onChange({
+      ...form,
+      gameTemplateId,
+      internalPort: gameTemplateId === "minecraft-java" ? 25565 : form.internalPort
+    });
+  }
+
   return (
     <article className="panel widePanel">
       <div className="panelHeader">
@@ -23,7 +31,7 @@ export function ServerCreatePanel({ disabled, form, onChange, onSubmit }: Server
           <span>게임</span>
           <select
             className="textInput"
-            onChange={(event) => update("gameTemplateId", event.target.value)}
+            onChange={(event) => handleGameChange(event.target.value)}
             value={form.gameTemplateId}
           >
             <option value="minecraft-java">Minecraft Java</option>
@@ -51,8 +59,8 @@ export function ServerCreatePanel({ disabled, form, onChange, onSubmit }: Server
         <label className="fieldGroup">
           <span>내부 포트</span>
           <input
-            className="textInput"
-            onChange={(event) => update("internalPort", Number(event.target.value))}
+            className="textInput readonlyInput"
+            readOnly
             type="number"
             value={form.internalPort}
           />
