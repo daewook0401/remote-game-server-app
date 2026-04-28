@@ -6,6 +6,8 @@ export type ServerOsType = "linux-ubuntu" | "linux-fedora" | "linux-arch" | "lin
 
 export type SshAuthMethod = "password" | "key";
 
+export type DockerIssue = "none" | "notInstalled" | "daemonStopped" | "permissionDenied" | "unknown";
+
 export interface ManagedServer {
   id: string;
   name: string;
@@ -83,6 +85,9 @@ export interface SshTestResult {
   expectedOs: ServerOsType;
   osMatches: boolean;
   dockerInstalled: boolean;
+  dockerDaemonRunning: boolean;
+  dockerPermission: boolean | "unknown";
+  dockerIssue: DockerIssue;
   dockerReady: boolean;
   agentPortOpen: boolean;
   output: string;

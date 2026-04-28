@@ -10,7 +10,7 @@ export function osDetectionCommand(expectedOs: ServerOsType) {
       "[System.Environment]::OSVersion.VersionString;",
       "Write-Output '__OS_END__';",
       "Write-Output '__DOCKER_START__';",
-      "if (Get-Command docker -ErrorAction SilentlyContinue) { docker --version; docker info 2>$null; if ($LASTEXITCODE -eq 0) { Write-Output 'DOCKER_READY=true' } else { Write-Output 'DOCKER_READY=false' } } else { Write-Output 'DOCKER_INSTALLED=false'; Write-Output 'DOCKER_READY=false' };",
+      "if (Get-Command docker -ErrorAction SilentlyContinue) { Write-Output 'DOCKER_INSTALLED=true'; docker --version; docker info 2>$null; if ($LASTEXITCODE -eq 0) { Write-Output 'DOCKER_DAEMON=true'; Write-Output 'DOCKER_PERMISSION=true'; Write-Output 'DOCKER_READY=true' } else { Write-Output 'DOCKER_DAEMON=false'; Write-Output 'DOCKER_PERMISSION=unknown'; Write-Output 'DOCKER_READY=false' } } else { Write-Output 'DOCKER_INSTALLED=false'; Write-Output 'DOCKER_DAEMON=false'; Write-Output 'DOCKER_PERMISSION=false'; Write-Output 'DOCKER_READY=false' };",
       "Write-Output '__DOCKER_END__';",
       "Write-Output '__AGENT_START__';",
       "if ((Test-NetConnection 127.0.0.1 -Port 18080 -InformationLevel Quiet)) { Write-Output 'AGENT_PORT_OPEN=true' } else { Write-Output 'AGENT_PORT_OPEN=false' };",
@@ -25,7 +25,7 @@ export function osDetectionCommand(expectedOs: ServerOsType) {
       "sw_vers -productName 2>/dev/null; sw_vers -productVersion 2>/dev/null; uname -a;",
       "printf '\\n__OS_END__\\n';",
       "printf '__DOCKER_START__\\n';",
-      "if command -v docker >/dev/null 2>&1; then docker --version; docker info >/dev/null 2>&1 && printf 'DOCKER_READY=true\\n' || printf 'DOCKER_READY=false\\n'; else printf 'DOCKER_INSTALLED=false\\nDOCKER_READY=false\\n'; fi;",
+      "if command -v docker >/dev/null 2>&1; then printf 'DOCKER_INSTALLED=true\\n'; docker --version; DOCKER_INFO_OUTPUT=$(docker info 2>&1 >/tmp/remote-game-agent-docker-info.out || true); DOCKER_INFO_OUTPUT=\"$DOCKER_INFO_OUTPUT $(cat /tmp/remote-game-agent-docker-info.out 2>/dev/null || true)\"; if docker info >/dev/null 2>&1; then printf 'DOCKER_DAEMON=true\\nDOCKER_PERMISSION=true\\nDOCKER_READY=true\\n'; elif printf '%s' \"$DOCKER_INFO_OUTPUT\" | grep -Eiq 'permission denied|Got permission denied|permission'; then printf 'DOCKER_DAEMON=true\\nDOCKER_PERMISSION=false\\nDOCKER_READY=false\\n'; else printf 'DOCKER_DAEMON=false\\nDOCKER_PERMISSION=unknown\\nDOCKER_READY=false\\n'; fi; else printf 'DOCKER_INSTALLED=false\\nDOCKER_DAEMON=false\\nDOCKER_PERMISSION=false\\nDOCKER_READY=false\\n'; fi;",
       "printf '__DOCKER_END__\\n';",
       "printf '__AGENT_START__\\n';",
       "if lsof -iTCP:18080 -sTCP:LISTEN >/dev/null 2>&1; then printf 'AGENT_PORT_OPEN=true\\n'; else printf 'AGENT_PORT_OPEN=false\\n'; fi;",
@@ -38,7 +38,7 @@ export function osDetectionCommand(expectedOs: ServerOsType) {
     "cat /etc/os-release 2>/dev/null || uname -a;",
     "printf '\\n__OS_END__\\n';",
     "printf '__DOCKER_START__\\n';",
-    "if command -v docker >/dev/null 2>&1; then docker --version; docker info >/dev/null 2>&1 && printf 'DOCKER_READY=true\\n' || printf 'DOCKER_READY=false\\n'; else printf 'DOCKER_INSTALLED=false\\nDOCKER_READY=false\\n'; fi;",
+    "if command -v docker >/dev/null 2>&1; then printf 'DOCKER_INSTALLED=true\\n'; docker --version; DOCKER_INFO_OUTPUT=$(docker info 2>&1 >/tmp/remote-game-agent-docker-info.out || true); DOCKER_INFO_OUTPUT=\"$DOCKER_INFO_OUTPUT $(cat /tmp/remote-game-agent-docker-info.out 2>/dev/null || true)\"; if docker info >/dev/null 2>&1; then printf 'DOCKER_DAEMON=true\\nDOCKER_PERMISSION=true\\nDOCKER_READY=true\\n'; elif printf '%s' \"$DOCKER_INFO_OUTPUT\" | grep -Eiq 'permission denied|Got permission denied|permission'; then printf 'DOCKER_DAEMON=true\\nDOCKER_PERMISSION=false\\nDOCKER_READY=false\\n'; else printf 'DOCKER_DAEMON=false\\nDOCKER_PERMISSION=unknown\\nDOCKER_READY=false\\n'; fi; else printf 'DOCKER_INSTALLED=false\\nDOCKER_DAEMON=false\\nDOCKER_PERMISSION=false\\nDOCKER_READY=false\\n'; fi;",
     "printf '__DOCKER_END__\\n';",
     "printf '__AGENT_START__\\n';",
     "if (command -v ss >/dev/null 2>&1 && ss -ltn | grep -q ':18080 ') || (command -v netstat >/dev/null 2>&1 && netstat -ltn | grep -q ':18080 ') || (command -v lsof >/dev/null 2>&1 && lsof -iTCP:18080 -sTCP:LISTEN >/dev/null 2>&1); then printf 'AGENT_PORT_OPEN=true\\n'; else printf 'AGENT_PORT_OPEN=false\\n'; fi;",
@@ -76,11 +76,30 @@ export function doesOperatingSystemMatch(expectedOs: ServerOsType, detectedOs: s
 
 export function isDockerInstalled(output: string) {
   const dockerSection = extractSection(output, "DOCKER").toLowerCase();
-  return dockerSection.includes("docker version") || dockerSection.includes("docker_installed=true");
+  return dockerSection.includes("docker_installed=true") || dockerSection.includes("docker version");
 }
 
 export function isDockerReady(output: string) {
   return extractSection(output, "DOCKER").toLowerCase().includes("docker_ready=true");
+}
+
+export function isDockerDaemonRunning(output: string) {
+  return extractSection(output, "DOCKER").toLowerCase().includes("docker_daemon=true");
+}
+
+export function hasDockerPermission(output: string) {
+  const dockerSection = extractSection(output, "DOCKER").toLowerCase();
+  if (dockerSection.includes("docker_permission=true")) return true;
+  if (dockerSection.includes("docker_permission=false")) return false;
+  return "unknown";
+}
+
+export function dockerIssue(output: string) {
+  if (!isDockerInstalled(output)) return "notInstalled";
+  if (!isDockerDaemonRunning(output)) return "daemonStopped";
+  if (hasDockerPermission(output) === false) return "permissionDenied";
+  if (!isDockerReady(output)) return "unknown";
+  return "none";
 }
 
 export function isAgentPortOpen(output: string) {

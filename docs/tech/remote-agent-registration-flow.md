@@ -164,6 +164,15 @@ SSH 확인 또는 Agent 준비 결과는 서버 카드의 상태에 반영한다
 
 Docker가 설치되지 않은 서버는 등록 화면 아래에 OS별 Docker 설치 안내를 표시한다.
 
+Docker 진단은 다음 상태를 구분한다.
+
+- `notInstalled`: Docker CLI가 없다.
+- `daemonStopped`: Docker CLI는 있지만 daemon이 응답하지 않는다.
+- `permissionDenied`: Docker daemon은 있으나 현재 SSH 사용자에게 Docker socket 접근 권한이 없다.
+- `unknown`: 설치/권한/daemon 중 어느 문제인지 단정하기 어렵다.
+
+각 상태에 따라 설치, 실행, 권한 안내를 다르게 표시한다.
+
 ## 다음 구현 후보
 
 - SSH 연결 테스트 결과를 바탕으로 Agent 설치/실행 명령 안내를 추가한다.

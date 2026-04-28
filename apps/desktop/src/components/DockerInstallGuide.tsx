@@ -1,10 +1,11 @@
-import type { ServerOsType } from "../types/server";
+import type { DockerIssue, ServerOsType } from "../types/server";
 
 interface DockerInstallGuideProps {
+  issue: DockerIssue;
   osType: ServerOsType;
 }
 
-const guideCommands: Record<ServerOsType, string[]> = {
+const installCommands: Record<ServerOsType, string[]> = {
   "linux-ubuntu": [
     "sudo apt-get update",
     "sudo apt-get install -y ca-certificates curl gnupg",
@@ -37,14 +38,44 @@ const guideCommands: Record<ServerOsType, string[]> = {
   ]
 };
 
-export function DockerInstallGuide({ osType }: DockerInstallGuideProps) {
+const daemonCommands: Record<ServerOsType, string[]> = {
+  "linux-ubuntu": ["sudo systemctl enable --now docker", "sudo systemctl status docker"],
+  "linux-fedora": ["sudo systemctl enable --now docker", "sudo systemctl status docker"],
+  "linux-arch": ["sudo systemctl enable --now docker", "sudo systemctl status docker"],
+  linux: ["sudo systemctl enable --now docker", "sudo systemctl status docker"],
+  windows: ["Docker Desktop 실행", "Settings에서 Docker Engine 상태 확인"],
+  macos: ["Docker.app 실행", "Docker Desktop 상태 확인"]
+};
+
+const permissionCommands: Record<ServerOsType, string[]> = {
+  "linux-ubuntu": ["sudo usermod -aG docker $USER", "newgrp docker"],
+  "linux-fedora": ["sudo usermod -aG docker $USER", "newgrp docker"],
+  "linux-arch": ["sudo usermod -aG docker $USER", "newgrp docker"],
+  linux: ["sudo usermod -aG docker $USER", "newgrp docker"],
+  windows: ["관리자 권한 또는 Docker Desktop 권한 확인"],
+  macos: ["Docker Desktop 권한과 socket 접근 확인"]
+};
+
+function commandsForIssue(osType: ServerOsType, issue: DockerIssue) {
+  if (issue === "daemonStopped") return daemonCommands[osType];
+  if (issue === "permissionDenied") return permissionCommands[osType];
+  return installCommands[osType];
+}
+
+function titleForIssue(issue: DockerIssue) {
+  if (issue === "daemonStopped") return "Docker 실행 안내";
+  if (issue === "permissionDenied") return "Docker 권한 안내";
+  return "Docker 설치 안내";
+}
+
+export function DockerInstallGuide({ issue, osType }: DockerInstallGuideProps) {
   return (
     <article className="panel widePanel guidePanel">
       <div className="panelHeader">
-        <h2>Docker 설치 안내</h2>
+        <h2>{titleForIssue(issue)}</h2>
       </div>
       <div className="commandList">
-        {guideCommands[osType].map((command) => (
+        {commandsForIssue(osType, issue).map((command) => (
           <code key={command}>{command}</code>
         ))}
       </div>

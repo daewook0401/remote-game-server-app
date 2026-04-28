@@ -17,7 +17,7 @@ import { prepareRemoteAgent } from "../services/agentBootstrapClient";
 import { loadStoredServers, saveStoredServers } from "../services/serverStorage";
 import { testSSHConnection } from "../services/sshClient";
 import type { ContainerActionRequest, ContainerSummaryResponse, DockerStatusResponse } from "../types/api";
-import type { ContainerSummary, ManagedServer, ServerCreateForm, ServerOsType, ServerRegistrationForm } from "../types/server";
+import type { ContainerSummary, DockerIssue, ManagedServer, ServerCreateForm, ServerOsType, ServerRegistrationForm } from "../types/server";
 
 type NoticeKind = "info" | "success" | "warning" | "error";
 
@@ -57,7 +57,7 @@ export function ServerManagementPage() {
   });
   const [pendingCreate, setPendingCreate] = useState(false);
   const [pendingAction, setPendingAction] = useState<ContainerActionRequest>();
-  const [dockerGuideOs, setDockerGuideOs] = useState<ServerOsType>();
+  const [dockerGuide, setDockerGuide] = useState<{ issue: DockerIssue; osType: ServerOsType }>();
   const activeServer = managedServers.find((server) => server.id === activeServerId) ?? managedServers[0];
   const activeAgentBaseUrl = activeServer?.agentBaseUrl;
   const activeAgentToken = activeServer?.agentToken;
@@ -345,16 +345,16 @@ export function ServerManagementPage() {
       }
 
       const isReady = result.osMatches && result.dockerInstalled && result.dockerReady && result.agentPortOpen && agentApiReachable;
-      setDockerGuideOs(result.dockerInstalled ? undefined : registrationForm.osType);
-      if (!result.dockerInstalled) {
-        upsertDiagnosticServer("needsDocker", "Docker 설치 필요");
+      setDockerGuide(result.dockerIssue === "none" ? undefined : { issue: result.dockerIssue, osType: registrationForm.osType });
+      if (result.dockerIssue !== "none") {
+        upsertDiagnosticServer("needsDocker", dockerMessage(result.dockerIssue));
       }
       setNoticeKind(isReady ? "success" : "warning");
       setMessage(
         [
           `SSH 접속 성공`,
           `OS ${result.osMatches ? "일치" : "불일치"}(${result.detectedOs})`,
-          `Docker ${result.dockerReady ? "준비됨" : result.dockerInstalled ? "설치됨/미실행" : "미설치"}`,
+          `Docker ${dockerMessage(result.dockerIssue)}`,
           `Agent 포트 ${result.agentPortOpen ? "열림" : "닫힘"}`,
           `Agent API ${agentApiReachable ? "접근 가능" : "접근 불가"}`
         ].join(" · ")
@@ -466,6 +466,14 @@ export function ServerManagementPage() {
       agentStatus: status === "ready" ? "connected" : status === "agentApiBlocked" ? "offline" : "notInstalled",
       dockerStatus: status === "needsDocker" ? "needsSetup" : "ready"
     };
+  }
+
+  function dockerMessage(issue: DockerIssue) {
+    if (issue === "none") return "준비됨";
+    if (issue === "notInstalled") return "미설치";
+    if (issue === "daemonStopped") return "daemon 미실행";
+    if (issue === "permissionDenied") return "권한 부족";
+    return "확인 필요";
   }
 
   function upsertDiagnosticServer(status: ManagedServer["lastAgentPrepareStatus"], message: string) {
@@ -668,7 +676,7 @@ export function ServerManagementPage() {
         onTestSSH={handleTestSSHInput}
       />
 
-      {dockerGuideOs ? <DockerInstallGuide osType={dockerGuideOs} /> : null}
+      {dockerGuide ? <DockerInstallGuide issue={dockerGuide.issue} osType={dockerGuide.osType} /> : null}
 
       <section className="modeGrid" aria-label="등록된 서버">
         {managedServers.map((server) => (
