@@ -127,6 +127,12 @@ button:disabled {
   background: #ffffff;
 }
 
+.secondaryButton.warningButton {
+  border-color: #f59e0b;
+  color: #92400e;
+  background: #fef3c7;
+}
+
 .modeGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

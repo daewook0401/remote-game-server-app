@@ -46,3 +46,57 @@ export async function runSshCommand(request: SshRequest, command: string) {
       });
   });
 }
+
+export async function runSshCommandWithInput(request: SshRequest, command: string, input: string) {
+  const client = new Client();
+  const privateKey = request.authMethod === "key" && request.keyPath
+    ? await readFile(request.keyPath, "utf8")
+    : undefined;
+
+  return new Promise<string>((resolve, reject) => {
+    client
+      .on("ready", () => {
+        client.exec(command, (error, stream) => {
+          if (error) {
+            client.end();
+            reject(error);
+            return;
+          }
+
+          const chunks: string[] = [];
+          const errorChunks: string[] = [];
+
+          stream
+            .on("close", (code: number) => {
+              client.end();
+              const output = [...chunks, ...errorChunks].join("");
+              if (code === 0) {
+                resolve(output);
+                return;
+              }
+
+              reject(new Error(output || `SSH command failed with exit code ${code}`));
+            })
+            .on("data", (data: Buffer) => {
+              chunks.push(data.toString("utf8"));
+            });
+
+          stream.stderr.on("data", (data: Buffer) => {
+            errorChunks.push(data.toString("utf8"));
+          });
+
+          stream.write(input);
+          stream.end();
+        });
+      })
+      .on("error", reject)
+      .connect({
+        host: request.host,
+        port: request.port,
+        username: request.username,
+        password: request.authMethod === "password" ? request.password : undefined,
+        privateKey,
+        readyTimeout: 10000
+      });
+  });
+}

@@ -15,6 +15,7 @@ import {
   listManagedContainers
 } from "../services/agentClient";
 import { prepareRemoteAgent } from "../services/agentBootstrapClient";
+import { openRemoteFirewallPort } from "../services/firewallClient";
 import { loadStoredServers, saveStoredServers } from "../services/serverStorage";
 import { testSSHConnection } from "../services/sshClient";
 import type { ContainerActionRequest, ContainerSummaryResponse, DockerStatusResponse } from "../types/api";
@@ -66,6 +67,7 @@ export function ServerManagementPage() {
   });
   const [pendingCreate, setPendingCreate] = useState(false);
   const [pendingAction, setPendingAction] = useState<ContainerActionRequest>();
+  const [pendingFirewallOpen, setPendingFirewallOpen] = useState(false);
   const [dockerGuide, setDockerGuide] = useState<{ issue: DockerIssue; osType: ServerOsType }>();
   const activeServer = managedServers.find((server) => server.id === activeServerId) ?? managedServers[0];
   const activeAgentBaseUrl = activeServer?.agentBaseUrl;
@@ -460,6 +462,67 @@ export function ServerManagementPage() {
     }
   }
 
+  async function handleOpenFirewallPort() {
+    if (registrationForm.targetType === "local") {
+      setNoticeKind("info");
+      setMessage("로컬 서버는 앱에서 원격 SSH 방화벽 포트 설정이 필요하지 않습니다.");
+      return;
+    }
+
+    if (registrationForm.osType === "windows" || registrationForm.osType === "macos") {
+      setNoticeKind("error");
+      setMessage("자동 포트 설정은 Linux 서버에서만 지원합니다. Windows/macOS는 안내 가이드를 따라 수동으로 열어야 합니다.");
+      return;
+    }
+
+    if (!registrationForm.sshHost || !registrationForm.sshUser || !registrationForm.sshPort) {
+      setNoticeKind("error");
+      setMessage("포트 설정을 하려면 SSH host, port, user가 필요합니다.");
+      return;
+    }
+
+    if (registrationForm.sshAuthMethod !== "password" || !registrationForm.sshPassword) {
+      setNoticeKind("error");
+      setMessage("SSH 비밀번호를 sudo에 재사용하는 방식이므로 SSH 인증을 password로 선택하고 password를 입력해야 합니다.");
+      return;
+    }
+
+    if (!pendingFirewallOpen) {
+      setPendingFirewallOpen(true);
+      setNoticeKind("warning");
+      setMessage(`포트 ${createForm.externalPort}/tcp 설정에는 sudo 관리자 권한이 필요합니다. 다시 누르면 SSH 비밀번호를 sudo에 재사용합니다.`);
+      return;
+    }
+
+    try {
+      setNoticeKind("info");
+      setMessage(`포트 ${createForm.externalPort}/tcp 방화벽 설정을 진행합니다.`);
+      const result = await openRemoteFirewallPort({
+        host: registrationForm.sshHost,
+        port: registrationForm.sshPort,
+        username: registrationForm.sshUser,
+        authMethod: registrationForm.sshAuthMethod,
+        password: registrationForm.sshPassword,
+        expectedOs: registrationForm.osType,
+        sudoPassword: registrationForm.sshPassword,
+        protocol: "tcp",
+        firewallPort: createForm.externalPort
+      });
+
+      setPendingFirewallOpen(false);
+      setNoticeKind(result.opened ? "success" : "warning");
+      setMessage(
+        result.opened
+          ? `서버 내부 방화벽 포트 ${createForm.externalPort}/tcp 설정 완료: ${result.method}`
+          : `자동 포트 설정 확인이 필요합니다: ${result.message}`
+      );
+    } catch (error) {
+      setPendingFirewallOpen(false);
+      setNoticeKind("error");
+      setMessage(error instanceof Error ? error.message : "포트 설정 실패");
+    }
+  }
+
   function buildServerFromRegistration(status: ManagedServer["lastAgentPrepareStatus"], message: string): ManagedServer {
     return {
       id: `${registrationForm.targetType}-${Date.now()}`,
@@ -766,9 +829,21 @@ export function ServerManagementPage() {
         onSubmit={handleCreateServer}
       />
 
+      {pendingFirewallOpen ? (
+        <article className="confirmPanel">
+          <h2>sudo 관리자 권한 확인</h2>
+          <p>
+            포트 설정은 SSH 비밀번호를 sudo 입력으로 재사용해 서버 내부 방화벽을 변경합니다.
+            AWS 보안 그룹, 클라우드 방화벽, 공유기 포트포워딩은 별도로 열어야 할 수 있습니다.
+          </p>
+        </article>
+      ) : null}
+
       <ServerRegistrationPanel
         form={registrationForm}
+        isFirewallConfirming={pendingFirewallOpen}
         onChange={setRegistrationForm}
+        onOpenFirewallPort={handleOpenFirewallPort}
         onPrepareAgent={handlePrepareAgent}
         onSubmit={handleRegisterServer}
         onTestSSH={handleTestSSHInput}

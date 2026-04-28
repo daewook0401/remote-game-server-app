@@ -14,3 +14,16 @@ export interface AgentPrepareRequest extends SshRequest {
   agentToken?: string;
   downloadUrl: string;
 }
+
+export interface FirewallOpenPortRequest extends SshRequest {
+  firewallPort: number;
+  protocol: "tcp" | "udp";
+  sudoPassword: string;
+}
+
+export interface FirewallOpenPortResult {
+  opened: boolean;
+  method: string;
+  message: string;
+  output: string;
+}

@@ -2,7 +2,9 @@ import type { ServerOsType, ServerRegistrationForm, ServerTargetType } from "../
 
 interface ServerRegistrationPanelProps {
   form: ServerRegistrationForm;
+  isFirewallConfirming: boolean;
   onChange: (form: ServerRegistrationForm) => void;
+  onOpenFirewallPort: () => void;
   onPrepareAgent: () => void;
   onSubmit: () => void;
   onTestSSH: () => void;
@@ -25,7 +27,9 @@ const osOptions: Array<{ label: string; value: ServerOsType }> = [
 
 export function ServerRegistrationPanel({
   form,
+  isFirewallConfirming,
   onChange,
+  onOpenFirewallPort,
   onPrepareAgent,
   onSubmit,
   onTestSSH
@@ -186,6 +190,13 @@ export function ServerRegistrationPanel({
             </button>
             <button className="primaryButton fullWidthButton" onClick={onPrepareAgent} type="button">
               Agent 준비
+            </button>
+            <button
+              className={isFirewallConfirming ? "secondaryButton fullWidthButton warningButton" : "secondaryButton fullWidthButton"}
+              onClick={onOpenFirewallPort}
+              type="button"
+            >
+              {isFirewallConfirming ? "sudo 허용 후 포트 설정" : "포트 설정"}
             </button>
           </>
         ) : null}

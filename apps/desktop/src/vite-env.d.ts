@@ -7,5 +7,6 @@ interface Window {
     saveServers?: (servers: unknown) => Promise<boolean>;
     testSSH?: (request: unknown) => Promise<unknown>;
     prepareAgent?: (request: unknown) => Promise<unknown>;
+    openFirewallPort?: (request: unknown) => Promise<unknown>;
   };
 }

@@ -79,6 +79,19 @@ export interface AgentPrepareRequest extends SshTestRequest {
   downloadUrl: string;
 }
 
+export interface FirewallOpenPortRequest extends SshTestRequest {
+  firewallPort: number;
+  protocol: "tcp" | "udp";
+  sudoPassword: string;
+}
+
+export interface FirewallOpenPortResult {
+  opened: boolean;
+  method: string;
+  message: string;
+  output: string;
+}
+
 export interface SshTestResult {
   connected: boolean;
   detectedOs: string;
