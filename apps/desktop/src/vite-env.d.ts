@@ -6,5 +6,6 @@ interface Window {
     loadServers?: () => Promise<unknown>;
     saveServers?: (servers: unknown) => Promise<boolean>;
     testSSH?: (request: unknown) => Promise<unknown>;
+    prepareAgent?: (request: unknown) => Promise<unknown>;
   };
 }

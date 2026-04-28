@@ -12,6 +12,7 @@ import {
   getDockerStatus,
   listManagedContainers
 } from "../services/agentClient";
+import { prepareRemoteAgent } from "../services/agentBootstrapClient";
 import { loadStoredServers, saveStoredServers } from "../services/serverStorage";
 import { testSSHConnection } from "../services/sshClient";
 import type { ContainerActionRequest, ContainerSummaryResponse, DockerStatusResponse } from "../types/api";
@@ -50,7 +51,8 @@ export function ServerManagementPage() {
     sshKeyPath: "",
     sshPassword: "",
     agentBaseUrl: "http://127.0.0.1:18080",
-    agentToken: ""
+    agentToken: "",
+    agentDownloadUrl: "https://github.com/daewook0401/remote-game-server-app/releases/latest/download/agent-linux-amd64"
   });
   const [pendingCreate, setPendingCreate] = useState(false);
   const [pendingAction, setPendingAction] = useState<ContainerActionRequest>();
@@ -357,6 +359,82 @@ export function ServerManagementPage() {
     }
   }
 
+  async function handlePrepareAgent() {
+    if (registrationForm.targetType === "local") {
+      setNoticeKind("info");
+      setMessage("로컬 서버는 Agent 준비가 필요하지 않습니다.");
+      return;
+    }
+
+    if (registrationForm.osType === "windows" || registrationForm.osType === "macos") {
+      setNoticeKind("error");
+      setMessage("현재 Agent 자동 준비는 Linux 서버만 지원합니다.");
+      return;
+    }
+
+    if (!registrationForm.sshHost || !registrationForm.sshUser || !registrationForm.sshPort) {
+      setNoticeKind("error");
+      setMessage("SSH host, port, user를 입력해야 합니다.");
+      return;
+    }
+
+    if (!registrationForm.agentDownloadUrl) {
+      setNoticeKind("error");
+      setMessage("Linux Agent 다운로드 URL이 필요합니다.");
+      return;
+    }
+
+    if (registrationForm.sshAuthMethod === "password" && !registrationForm.sshPassword) {
+      setNoticeKind("error");
+      setMessage("패스워드 인증을 선택한 경우 SSH password가 필요합니다.");
+      return;
+    }
+
+    if (registrationForm.sshAuthMethod === "key" && !registrationForm.sshKeyPath) {
+      setNoticeKind("error");
+      setMessage("키 인증을 선택한 경우 SSH key path가 필요합니다.");
+      return;
+    }
+
+    try {
+      setNoticeKind("info");
+      setMessage("SSH로 Linux Agent 준비를 진행합니다.");
+      const result = await prepareRemoteAgent({
+        host: registrationForm.sshHost,
+        port: registrationForm.sshPort,
+        username: registrationForm.sshUser,
+        authMethod: registrationForm.sshAuthMethod,
+        password: registrationForm.sshAuthMethod === "password" ? registrationForm.sshPassword : undefined,
+        keyPath: registrationForm.sshAuthMethod === "key" ? registrationForm.sshKeyPath : undefined,
+        expectedOs: registrationForm.osType,
+        agentToken: registrationForm.agentToken || undefined,
+        downloadUrl: registrationForm.agentDownloadUrl
+      });
+
+      let agentApiReachable = false;
+      try {
+        await getDockerStatus(registrationForm.agentBaseUrl, registrationForm.agentToken || undefined);
+        agentApiReachable = true;
+      } catch {
+        agentApiReachable = false;
+      }
+
+      const ready = result.installed && result.started && result.agentPortOpen && agentApiReachable;
+      setNoticeKind(ready ? "success" : "warning");
+      setMessage(
+        [
+          `Agent ${result.installed ? "설치됨" : "설치 실패"}`,
+          `실행 ${result.started ? "성공" : "확인 실패"}`,
+          `포트 ${result.agentPortOpen ? "열림" : "닫힘"}`,
+          `API ${agentApiReachable ? "접근 가능" : "접근 불가"}`
+        ].join(" · ")
+      );
+    } catch (error) {
+      setNoticeKind("error");
+      setMessage(error instanceof Error ? error.message : "Agent 준비 실패");
+    }
+  }
+
   async function handleCheckServer(serverId: string) {
     setActiveServerId(serverId);
     const server = managedServers.find((item) => item.id === serverId);
@@ -478,6 +556,7 @@ export function ServerManagementPage() {
       <ServerRegistrationPanel
         form={registrationForm}
         onChange={setRegistrationForm}
+        onPrepareAgent={handlePrepareAgent}
         onSubmit={handleRegisterServer}
         onTestSSH={handleTestSSHInput}
       />

@@ -11,5 +11,10 @@ import (
 
 func main() {
 	server := api.NewServerWithToken(docker.NewServiceFromEnvironment(), os.Getenv("AGENT_TOKEN"))
-	log.Fatal(http.ListenAndServe("127.0.0.1:18080", server.Routes()))
+	addr := os.Getenv("AGENT_ADDR")
+	if addr == "" {
+		addr = "127.0.0.1:18080"
+	}
+
+	log.Fatal(http.ListenAndServe(addr, server.Routes()))
 }

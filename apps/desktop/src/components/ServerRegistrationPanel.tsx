@@ -3,6 +3,7 @@ import type { ServerOsType, ServerRegistrationForm, ServerTargetType } from "../
 interface ServerRegistrationPanelProps {
   form: ServerRegistrationForm;
   onChange: (form: ServerRegistrationForm) => void;
+  onPrepareAgent: () => void;
   onSubmit: () => void;
   onTestSSH: () => void;
 }
@@ -25,6 +26,7 @@ const osOptions: Array<{ label: string; value: ServerOsType }> = [
 export function ServerRegistrationPanel({
   form,
   onChange,
+  onPrepareAgent,
   onSubmit,
   onTestSSH
 }: ServerRegistrationPanelProps) {
@@ -100,6 +102,15 @@ export function ServerRegistrationPanel({
             value={form.agentToken}
           />
         </label>
+        <label className="fieldGroup">
+          <span>Agent 다운로드 URL</span>
+          <input
+            className="textInput"
+            onChange={(event) => update("agentDownloadUrl", event.target.value)}
+            placeholder="https://github.com/.../agent-linux-amd64"
+            value={form.agentDownloadUrl}
+          />
+        </label>
       </div>
 
       {needsSSH ? (
@@ -169,9 +180,14 @@ export function ServerRegistrationPanel({
 
       <div className="formActions">
         {needsSSH ? (
-          <button className="secondaryButton fullWidthButton" onClick={onTestSSH} type="button">
-            SSH 입력 확인
-          </button>
+          <>
+            <button className="secondaryButton fullWidthButton" onClick={onTestSSH} type="button">
+              SSH 확인
+            </button>
+            <button className="primaryButton fullWidthButton" onClick={onPrepareAgent} type="button">
+              Agent 준비
+            </button>
+          </>
         ) : null}
         <button className="secondaryButton fullWidthButton" onClick={onSubmit} type="button">
           서버 등록

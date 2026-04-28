@@ -57,6 +57,7 @@ export interface ServerRegistrationForm {
   sshPassword: string;
   agentBaseUrl: string;
   agentToken: string;
+  agentDownloadUrl: string;
 }
 
 export interface SshTestRequest {
@@ -69,6 +70,11 @@ export interface SshTestRequest {
   expectedOs: ServerOsType;
 }
 
+export interface AgentPrepareRequest extends SshTestRequest {
+  agentToken?: string;
+  downloadUrl: string;
+}
+
 export interface SshTestResult {
   connected: boolean;
   detectedOs: string;
@@ -76,6 +82,13 @@ export interface SshTestResult {
   osMatches: boolean;
   dockerInstalled: boolean;
   dockerReady: boolean;
+  agentPortOpen: boolean;
+  output: string;
+}
+
+export interface AgentPrepareResult {
+  installed: boolean;
+  started: boolean;
   agentPortOpen: boolean;
   output: string;
 }

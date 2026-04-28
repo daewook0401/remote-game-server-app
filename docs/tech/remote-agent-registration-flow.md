@@ -140,6 +140,20 @@ SSH 접속 성공 · OS 일치(linux-ubuntu) · Docker 준비됨 · Agent 포트
 
 Agent 포트가 열려 있어도 방화벽, 보안 그룹, NAT, 바인딩 주소 때문에 Desktop에서 Agent API 접근이 실패할 수 있다. 그래서 서버 내부 포트 확인과 Desktop에서의 Agent URL 접근 확인을 분리한다.
 
+## Agent 준비 기준
+
+Linux 서버에서는 `Agent 준비` 버튼으로 다음 작업을 수행한다.
+
+- `/opt/remote-game-agent/agent` 존재 확인
+- Agent가 없으면 등록 화면의 Agent 다운로드 URL에서 바이너리 다운로드
+- 실행 권한 부여
+- `.env` 생성
+- systemd service 생성 또는 fallback `nohup` 실행
+- Agent 포트 `18080` listen 확인
+- Desktop에서 Agent URL `/docker/status` 접근 확인
+
+자세한 배포 기준은 [Linux Agent 배포 흐름](./linux-agent-distribution.md)을 따른다.
+
 ## 다음 구현 후보
 
 - SSH 연결 테스트 결과를 바탕으로 Agent 설치/실행 명령 안내를 추가한다.

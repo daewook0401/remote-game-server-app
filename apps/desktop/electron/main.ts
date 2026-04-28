@@ -19,6 +19,11 @@ interface SshTestRequest {
   expectedOs: ServerOsType;
 }
 
+interface AgentPrepareRequest extends SshTestRequest {
+  agentToken?: string;
+  downloadUrl: string;
+}
+
 function serversFilePath() {
   return path.join(app.getPath("userData"), serversFileName);
 }
@@ -58,7 +63,18 @@ ipcMain.handle("ssh:test", async (_event, request: SshTestRequest) => {
   };
 });
 
-async function runSshCommand(request: SshTestRequest) {
+ipcMain.handle("agent:prepare", async (_event, request: AgentPrepareRequest) => {
+  const output = await runSshCommand(request, agentPrepareCommand(request));
+
+  return {
+    installed: output.includes("AGENT_INSTALLED=true"),
+    started: output.includes("AGENT_STARTED=true"),
+    agentPortOpen: output.includes("AGENT_PORT_OPEN=true"),
+    output
+  };
+});
+
+async function runSshCommand(request: SshTestRequest, command = osDetectionCommand(request.expectedOs)) {
   const client = new Client();
   const privateKey = request.authMethod === "key" && request.keyPath
     ? await readFile(request.keyPath, "utf8")
@@ -67,7 +83,7 @@ async function runSshCommand(request: SshTestRequest) {
   return new Promise<string>((resolve, reject) => {
     client
       .on("ready", () => {
-        client.exec(osDetectionCommand(request.expectedOs), (error, stream) => {
+        client.exec(command, (error, stream) => {
           if (error) {
             client.end();
             reject(error);
@@ -101,6 +117,68 @@ async function runSshCommand(request: SshTestRequest) {
         readyTimeout: 10000
       });
   });
+}
+
+function shellSingleQuote(value: string) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function agentPrepareCommand(request: AgentPrepareRequest) {
+  if (request.expectedOs === "windows" || request.expectedOs === "macos") {
+    throw new Error("현재 Agent 자동 준비는 Linux 서버만 지원합니다.");
+  }
+
+  const token = request.agentToken ?? "";
+  return [
+    "set -eu;",
+    "AGENT_DIR=/opt/remote-game-agent;",
+    "AGENT_BIN=$AGENT_DIR/agent;",
+    "SERVICE_FILE=/etc/systemd/system/remote-game-agent.service;",
+    `DOWNLOAD_URL=${shellSingleQuote(request.downloadUrl)};`,
+    `AGENT_TOKEN_VALUE=${shellSingleQuote(token)};`,
+    "if [ \"$(id -u)\" -ne 0 ]; then SUDO=sudo; else SUDO=; fi;",
+    "$SUDO mkdir -p $AGENT_DIR;",
+    "if [ ! -f $AGENT_BIN ]; then",
+    "  if command -v curl >/dev/null 2>&1; then $SUDO curl -fsSL \"$DOWNLOAD_URL\" -o $AGENT_BIN;",
+    "  elif command -v wget >/dev/null 2>&1; then $SUDO wget -q \"$DOWNLOAD_URL\" -O $AGENT_BIN;",
+    "  else echo 'DOWNLOAD_TOOL_MISSING=true'; exit 12;",
+    "  fi;",
+    "  echo 'AGENT_DOWNLOADED=true';",
+    "else echo 'AGENT_EXISTS=true'; fi;",
+    "$SUDO chmod +x $AGENT_BIN;",
+    "$SUDO sh -c \"cat > $AGENT_DIR/.env\" <<EOF",
+    "AGENT_TOKEN=$AGENT_TOKEN_VALUE",
+    "AGENT_ADDR=0.0.0.0:18080",
+    "AGENT_DOCKER_MODE=cli",
+    "AGENT_DOCKER_PATH=docker",
+    "EOF",
+    "if command -v systemctl >/dev/null 2>&1; then",
+    "  $SUDO sh -c \"cat > $SERVICE_FILE\" <<EOF",
+    "[Unit]",
+    "Description=Remote Game Server Agent",
+    "After=network.target docker.service",
+    "",
+    "[Service]",
+    "WorkingDirectory=/opt/remote-game-agent",
+    "EnvironmentFile=/opt/remote-game-agent/.env",
+    "ExecStart=/opt/remote-game-agent/agent",
+    "Restart=always",
+    "RestartSec=3",
+    "",
+    "[Install]",
+    "WantedBy=multi-user.target",
+    "EOF",
+    "  $SUDO systemctl daemon-reload;",
+    "  $SUDO systemctl enable remote-game-agent >/dev/null 2>&1 || true;",
+    "  $SUDO systemctl restart remote-game-agent;",
+    "  sleep 1;",
+    "else",
+    "  nohup sh -c \"cd $AGENT_DIR && . ./.env && exec $AGENT_BIN\" >/tmp/remote-game-agent.log 2>&1 &",
+    "  sleep 1;",
+    "fi;",
+    "if [ -f $AGENT_BIN ]; then echo 'AGENT_INSTALLED=true'; else echo 'AGENT_INSTALLED=false'; fi;",
+    "if (command -v ss >/dev/null 2>&1 && ss -ltn | grep -q ':18080 ') || (command -v netstat >/dev/null 2>&1 && netstat -ltn | grep -q ':18080 ') || (command -v lsof >/dev/null 2>&1 && lsof -iTCP:18080 -sTCP:LISTEN >/dev/null 2>&1); then echo 'AGENT_PORT_OPEN=true'; echo 'AGENT_STARTED=true'; else echo 'AGENT_PORT_OPEN=false'; echo 'AGENT_STARTED=false'; fi;"
+  ].join(" ");
 }
 
 function osDetectionCommand(expectedOs: ServerOsType) {
