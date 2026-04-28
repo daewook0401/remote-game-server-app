@@ -196,7 +196,7 @@ export function ServerRegistrationPanel({
               onClick={onOpenFirewallPort}
               type="button"
             >
-              {isFirewallConfirming ? "sudo 허용 후 포트 설정" : "포트 설정"}
+              {isFirewallConfirming ? "sudo 허용 후 Agent 포트 설정" : "Agent 포트 설정"}
             </button>
           </>
         ) : null}

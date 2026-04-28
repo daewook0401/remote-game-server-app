@@ -22,12 +22,12 @@ sudo 경고 기반 서버 내부 방화벽 포트 설정
 
 ## 작업 내용
 
-- 서버 등록 영역에 `포트 설정` 버튼을 추가했다.
+- 서버 등록 영역에 `Agent 포트 설정` 버튼을 추가했다.
 - 포트 설정을 처음 누르면 sudo 관리자 권한 경고를 먼저 표시하도록 했다.
-- 사용자가 다시 확인하면 SSH password를 sudo 입력으로 재사용해 서버 내부 방화벽 포트를 설정하도록 했다.
+- 사용자가 다시 확인하면 SSH password를 sudo 입력으로 재사용해 서버 내부 방화벽의 Agent API 포트를 설정하도록 했다.
 - Electron IPC에 `firewall:openPort` 채널을 추가했다.
 - SSH 명령 실행 중 stdin 입력을 전달할 수 있도록 `runSshCommandWithInput`을 추가했다.
-- Linux 서버에서 `ufw`, `firewall-cmd`, `iptables` 순서로 사용 가능한 방화벽 도구를 찾아 `externalPort/tcp`를 열도록 했다.
+- Linux 서버에서 `ufw`, `firewall-cmd`, `iptables` 순서로 사용 가능한 방화벽 도구를 찾아 `Agent URL`의 포트, 기본 `18080/tcp`를 열도록 했다.
 - SSH password 인증이 아닌 경우에는 자동 sudo 포트 설정을 막고 안내 메시지를 표시하도록 했다.
 - 클라우드 보안 그룹, 공유기 포트포워딩 등 서버 외부 방화벽은 별도 수동 설정이 필요하다는 경고를 표시하도록 했다.
 

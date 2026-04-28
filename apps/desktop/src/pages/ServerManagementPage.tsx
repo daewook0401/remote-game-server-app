@@ -463,9 +463,16 @@ export function ServerManagementPage() {
   }
 
   async function handleOpenFirewallPort() {
+    const agentPort = getAgentPort(registrationForm.agentBaseUrl);
+    if (!agentPort) {
+      setNoticeKind("error");
+      setMessage("Agent URL에서 포트를 확인할 수 없습니다. 예: http://서버IP:18080");
+      return;
+    }
+
     if (registrationForm.targetType === "local") {
       setNoticeKind("info");
-      setMessage("로컬 서버는 앱에서 원격 SSH 방화벽 포트 설정이 필요하지 않습니다.");
+      setMessage("로컬 서버는 앱에서 원격 SSH Agent 포트 설정이 필요하지 않습니다.");
       return;
     }
 
@@ -490,13 +497,13 @@ export function ServerManagementPage() {
     if (!pendingFirewallOpen) {
       setPendingFirewallOpen(true);
       setNoticeKind("warning");
-      setMessage(`포트 ${createForm.externalPort}/tcp 설정에는 sudo 관리자 권한이 필요합니다. 다시 누르면 SSH 비밀번호를 sudo에 재사용합니다.`);
+      setMessage(`Agent 포트 ${agentPort}/tcp 설정에는 sudo 관리자 권한이 필요합니다. 다시 누르면 SSH 비밀번호를 sudo에 재사용합니다.`);
       return;
     }
 
     try {
       setNoticeKind("info");
-      setMessage(`포트 ${createForm.externalPort}/tcp 방화벽 설정을 진행합니다.`);
+      setMessage(`Agent 포트 ${agentPort}/tcp 방화벽 설정을 진행합니다.`);
       const result = await openRemoteFirewallPort({
         host: registrationForm.sshHost,
         port: registrationForm.sshPort,
@@ -506,14 +513,14 @@ export function ServerManagementPage() {
         expectedOs: registrationForm.osType,
         sudoPassword: registrationForm.sshPassword,
         protocol: "tcp",
-        firewallPort: createForm.externalPort
+        firewallPort: agentPort
       });
 
       setPendingFirewallOpen(false);
       setNoticeKind(result.opened ? "success" : "warning");
       setMessage(
         result.opened
-          ? `서버 내부 방화벽 포트 ${createForm.externalPort}/tcp 설정 완료: ${result.method}`
+          ? `서버 내부 방화벽 Agent 포트 ${agentPort}/tcp 설정 완료: ${result.method}`
           : `자동 포트 설정 확인이 필요합니다: ${result.message}`
       );
     } catch (error) {
@@ -521,6 +528,27 @@ export function ServerManagementPage() {
       setNoticeKind("error");
       setMessage(error instanceof Error ? error.message : "포트 설정 실패");
     }
+  }
+
+  function getAgentPort(agentBaseUrl: string) {
+    try {
+      const url = new URL(agentBaseUrl);
+      if (url.port) {
+        return Number(url.port);
+      }
+
+      if (url.protocol === "http:") {
+        return 80;
+      }
+
+      if (url.protocol === "https:") {
+        return 443;
+      }
+    } catch {
+      return undefined;
+    }
+
+    return undefined;
   }
 
   function buildServerFromRegistration(status: ManagedServer["lastAgentPrepareStatus"], message: string): ManagedServer {
@@ -833,7 +861,7 @@ export function ServerManagementPage() {
         <article className="confirmPanel">
           <h2>sudo 관리자 권한 확인</h2>
           <p>
-            포트 설정은 SSH 비밀번호를 sudo 입력으로 재사용해 서버 내부 방화벽을 변경합니다.
+            Agent 포트 설정은 SSH 비밀번호를 sudo 입력으로 재사용해 서버 내부 방화벽을 변경합니다.
             AWS 보안 그룹, 클라우드 방화벽, 공유기 포트포워딩은 별도로 열어야 할 수 있습니다.
           </p>
         </article>
