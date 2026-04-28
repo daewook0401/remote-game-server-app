@@ -91,6 +91,7 @@ export function ServerManagementPage() {
         if (storedServers?.length) {
           setManagedServers(storedServers);
           setActiveServerId(storedServers[0].id);
+          syncRegistrationFormFromServer(storedServers[0]);
           setMessage(`저장된 서버 ${storedServers.length}개를 불러왔습니다.`);
         }
       } catch (error) {
@@ -442,22 +443,31 @@ export function ServerManagementPage() {
       });
 
       let agentApiReachable = false;
+      let preparedStatus: DockerStatusResponse | undefined;
       try {
-        await getDockerStatus(registrationForm.agentBaseUrl, registrationForm.agentToken || undefined);
+        preparedStatus = await getDockerStatus(registrationForm.agentBaseUrl, registrationForm.agentToken || undefined);
         agentApiReachable = true;
       } catch {
         agentApiReachable = false;
       }
 
-      const ready = result.installed && result.started && result.agentPortOpen && agentApiReachable;
+      if (preparedStatus) {
+        setDockerStatus(preparedStatus);
+      }
+
+      const versionReady = preparedStatus?.agentVersion === EXPECTED_AGENT_VERSION;
+      const dockerReady = preparedStatus?.mode === "cli" && preparedStatus.available;
+      const ready = result.installed && result.started && result.agentPortOpen && agentApiReachable && versionReady && dockerReady;
       const preparedServer = upsertPreparedServer(ready, agentApiReachable);
       setNoticeKind(ready ? "success" : "warning");
       setMessage(
         [
-          `Agent ${result.installed ? "설치됨" : "설치 실패"}`,
+          `Agent ${ready ? "업데이트 완료" : result.installed ? "설치됨, 확인 필요" : "설치 실패"}`,
           `실행 ${result.started ? "성공" : "확인 실패"}`,
           `포트 ${result.agentPortOpen ? "열림" : "닫힘"}`,
           `API ${agentApiReachable ? "접근 가능" : "접근 불가"}`,
+          `버전 ${preparedStatus?.agentVersion ?? "확인 불가"} / ${EXPECTED_AGENT_VERSION}`,
+          `Docker ${preparedStatus?.mode ?? "확인 불가"}`,
           `카드 ${preparedServer ? "반영됨" : "미반영"}`
         ].join(" · ")
       );
@@ -791,10 +801,31 @@ export function ServerManagementPage() {
   function handleSelectServer(serverId: string) {
     const server = managedServers.find((item) => item.id === serverId);
     setActiveServerId(serverId);
+    if (server) {
+      syncRegistrationFormFromServer(server);
+    }
     setContainers([]);
     setDockerStatus(undefined);
     setNoticeKind("info");
-    setMessage(server ? `${server.name} 선택됨. Agent 확인 후 컨테이너를 관리하세요.` : "서버 선택됨");
+    setMessage(server ? `${server.name} 선택됨. SSH 비밀번호만 입력하면 Agent 설치/업데이트를 실행할 수 있습니다.` : "서버 선택됨");
+  }
+
+  function syncRegistrationFormFromServer(server: ManagedServer) {
+    setRegistrationForm((current) => ({
+      ...current,
+      name: server.name,
+      targetType: server.targetType,
+      osType: server.osType,
+      sshHost: server.sshHost ?? "",
+      sshPort: server.sshPort ?? 22,
+      sshUser: server.sshUser ?? "",
+      sshAuthMethod: server.sshAuthMethod ?? "password",
+      sshKeyPath: server.sshKeyPath ?? "",
+      sshPassword: "",
+      agentBaseUrl: server.agentBaseUrl,
+      agentToken: server.agentToken ?? "",
+      agentDownloadUrl: current.agentDownloadUrl
+    }));
   }
 
   function handleDeleteServer(serverId: string) {
