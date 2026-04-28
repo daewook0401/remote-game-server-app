@@ -133,3 +133,33 @@ func TestBuildContainerActionArgs(t *testing.T) {
 		t.Fatalf("unexpected stop args: %v", args)
 	}
 }
+
+func TestMemoryConsoleCommand(t *testing.T) {
+	adapter := NewMemoryAdapter()
+	_, err := adapter.CreateMinecraftServer(CreateMinecraftServerRequest{
+		TargetType:     "local",
+		GameTemplateID: "minecraft-java",
+		InstanceID:     "instance-1",
+		ContainerName:  "minecraft-survival",
+		Image:          "itzg/minecraft-server",
+		InternalPort:   25565,
+		ExternalPort:   25565,
+		Memory:         "2G",
+		EulaAccepted:   true,
+	})
+	if err != nil {
+		t.Fatalf("failed to create memory container: %v", err)
+	}
+
+	result, err := adapter.ExecuteConsoleCommand(ConsoleCommandRequest{
+		ContainerID: "mc-minecraft-survival",
+		Command:     "say hello",
+	})
+	if err != nil {
+		t.Fatalf("expected command to succeed: %v", err)
+	}
+
+	if result.Command != "say hello" || len(result.Output) == 0 {
+		t.Fatalf("unexpected command result: %+v", result)
+	}
+}

@@ -1,5 +1,7 @@
 import type {
   ConsoleAttachRequest,
+  ConsoleCommandRequest,
+  ConsoleCommandResponse,
   ConsoleSnapshotResponse,
   ContainerActionRequest,
   ContainerSummaryResponse,
@@ -9,7 +11,7 @@ import type {
 import { getJSON, postJSON } from "./httpClient";
 
 const AGENT_BASE_URL = "http://127.0.0.1:18080";
-export const EXPECTED_AGENT_VERSION = "0.1.3";
+export const EXPECTED_AGENT_VERSION = "0.1.4";
 
 function agentUrl(path: string, baseUrl = AGENT_BASE_URL) {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
@@ -54,6 +56,18 @@ export function getConsoleSnapshot(
 ): Promise<ConsoleSnapshotResponse> {
   return postJSON<ConsoleSnapshotResponse, ConsoleAttachRequest>(
     agentUrl("/docker/containers/console", baseUrl),
+    payload,
+    { token }
+  );
+}
+
+export function sendConsoleCommand(
+  payload: ConsoleCommandRequest,
+  baseUrl?: string,
+  token?: string
+): Promise<ConsoleCommandResponse> {
+  return postJSON<ConsoleCommandResponse, ConsoleCommandRequest>(
+    agentUrl("/docker/containers/console/command", baseUrl),
     payload,
     { token }
   );

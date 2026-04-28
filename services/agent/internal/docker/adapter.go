@@ -6,4 +6,5 @@ type Adapter interface {
 	CreateMinecraftServer(request CreateMinecraftServerRequest) (ContainerSummary, error)
 	ApplyAction(request ContainerActionRequest) (ContainerSummary, error)
 	ConsoleSnapshot(request ConsoleAttachRequest) ConsoleSnapshot
+	ExecuteConsoleCommand(request ConsoleCommandRequest) (ConsoleCommandResult, error)
 }

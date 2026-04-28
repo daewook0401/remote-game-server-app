@@ -26,6 +26,11 @@ export interface ConsoleAttachRequest {
   containerId: string;
 }
 
+export interface ConsoleCommandRequest {
+  containerId: string;
+  command: string;
+}
+
 export interface ContainerSummaryResponse {
   id: string;
   name: string;
@@ -39,6 +44,12 @@ export interface ContainerSummaryResponse {
 export interface ConsoleSnapshotResponse {
   containerId: string;
   lines: string[];
+}
+
+export interface ConsoleCommandResponse {
+  containerId: string;
+  command: string;
+  output: string[];
 }
 
 export interface DockerStatusResponse {

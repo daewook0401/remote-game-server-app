@@ -87,3 +87,19 @@ func (adapter *MemoryAdapter) ConsoleSnapshot(request ConsoleAttachRequest) Cons
 		},
 	}
 }
+
+func (adapter *MemoryAdapter) ExecuteConsoleCommand(request ConsoleCommandRequest) (ConsoleCommandResult, error) {
+	if _, ok := adapter.containers[request.ContainerID]; !ok {
+		return ConsoleCommandResult{}, errors.New("container not found")
+	}
+
+	if request.Command == "" {
+		return ConsoleCommandResult{}, errors.New("console command is required")
+	}
+
+	return ConsoleCommandResult{
+		ContainerID: request.ContainerID,
+		Command:     request.Command,
+		Output:      []string{"[agent] command accepted: " + request.Command},
+	}, nil
+}

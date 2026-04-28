@@ -28,6 +28,7 @@ func (server *Server) Routes() http.Handler {
 	mux.HandleFunc("/docker/minecraft", server.handleCreateMinecraft)
 	mux.HandleFunc("/docker/containers/action", server.handleContainerAction)
 	mux.HandleFunc("/docker/containers/console", server.handleConsoleSnapshot)
+	mux.HandleFunc("/docker/containers/console/command", server.handleConsoleCommand)
 	return withCORS(server.withAuth(mux))
 }
 
@@ -115,6 +116,27 @@ func (server *Server) handleConsoleSnapshot(writer http.ResponseWriter, request 
 	}
 
 	writeJSON(writer, http.StatusOK, server.dockerService.ConsoleSnapshot(payload))
+}
+
+func (server *Server) handleConsoleCommand(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload docker.ConsoleCommandRequest
+	if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+		http.Error(writer, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	result, err := server.dockerService.ExecuteConsoleCommand(payload)
+	if err != nil {
+		http.Error(writer, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, result)
 }
 
 func writeJSON(writer http.ResponseWriter, status int, payload any) {

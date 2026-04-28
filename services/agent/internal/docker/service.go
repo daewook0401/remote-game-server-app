@@ -1,6 +1,6 @@
 package docker
 
-const AgentVersion = "0.1.3"
+const AgentVersion = "0.1.4"
 
 type Service struct {
 	adapter Adapter
@@ -34,4 +34,8 @@ func (service *Service) ApplyAction(request ContainerActionRequest) (ContainerSu
 
 func (service *Service) ConsoleSnapshot(request ConsoleAttachRequest) ConsoleSnapshot {
 	return service.adapter.ConsoleSnapshot(request)
+}
+
+func (service *Service) ExecuteConsoleCommand(request ConsoleCommandRequest) (ConsoleCommandResult, error) {
+	return service.adapter.ExecuteConsoleCommand(request)
 }

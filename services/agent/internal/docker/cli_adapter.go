@@ -123,6 +123,25 @@ func (adapter *CLIAdapter) ConsoleSnapshot(request ConsoleAttachRequest) Console
 	}
 }
 
+func (adapter *CLIAdapter) ExecuteConsoleCommand(request ConsoleCommandRequest) (ConsoleCommandResult, error) {
+	command := strings.TrimSpace(request.Command)
+	if command == "" {
+		return ConsoleCommandResult{}, errors.New("console command is required")
+	}
+
+	output, err := exec.Command(adapter.dockerPath, "exec", request.ContainerID, "rcon-cli", command).CombinedOutput()
+	lines := splitLines(output)
+	if err != nil {
+		return ConsoleCommandResult{}, errors.New(strings.TrimSpace(string(output)))
+	}
+
+	return ConsoleCommandResult{
+		ContainerID: request.ContainerID,
+		Command:     command,
+		Output:      lines,
+	}, nil
+}
+
 func (adapter *CLIAdapter) loadManagedState() ([]ContainerSummary, error) {
 	if adapter.stateFile == "" {
 		return nil, errors.New("agent state file is not configured")

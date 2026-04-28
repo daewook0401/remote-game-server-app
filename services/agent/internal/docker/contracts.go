@@ -36,6 +36,11 @@ type ConsoleAttachRequest struct {
 	ContainerID string `json:"containerId"`
 }
 
+type ConsoleCommandRequest struct {
+	ContainerID string `json:"containerId"`
+	Command     string `json:"command"`
+}
+
 type ContainerSummary struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
@@ -49,6 +54,12 @@ type ContainerSummary struct {
 type ConsoleSnapshot struct {
 	ContainerID string   `json:"containerId"`
 	Lines       []string `json:"lines"`
+}
+
+type ConsoleCommandResult struct {
+	ContainerID string   `json:"containerId"`
+	Command     string   `json:"command"`
+	Output      []string `json:"output"`
 }
 
 type DockerStatus struct {

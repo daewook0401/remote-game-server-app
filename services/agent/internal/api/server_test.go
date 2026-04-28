@@ -168,3 +168,55 @@ func TestDockerStatusAcceptsBearerToken(t *testing.T) {
 		t.Fatalf("expected 200, got %d", response.Code)
 	}
 }
+
+func TestConsoleCommand(t *testing.T) {
+	server := NewServer(docker.NewMemoryService())
+	createPayload := docker.CreateMinecraftServerRequest{
+		ServerID:       "local",
+		TargetType:     "local",
+		GameTemplateID: "minecraft-java",
+		InstanceID:     "instance-1",
+		ContainerName:  "minecraft-survival",
+		Image:          "itzg/minecraft-server",
+		InternalPort:   25565,
+		ExternalPort:   25565,
+		Memory:         "2G",
+		EulaAccepted:   true,
+	}
+
+	createBody, err := json.Marshal(createPayload)
+	if err != nil {
+		t.Fatalf("failed to marshal create request: %v", err)
+	}
+
+	createRequest := httptest.NewRequest(http.MethodPost, "/docker/minecraft", bytes.NewReader(createBody))
+	createResponse := httptest.NewRecorder()
+	server.Routes().ServeHTTP(createResponse, createRequest)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", createResponse.Code, createResponse.Body.String())
+	}
+
+	commandBody, err := json.Marshal(docker.ConsoleCommandRequest{
+		ContainerID: "mc-minecraft-survival",
+		Command:     "say hello",
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal command request: %v", err)
+	}
+
+	commandRequest := httptest.NewRequest(http.MethodPost, "/docker/containers/console/command", bytes.NewReader(commandBody))
+	commandResponse := httptest.NewRecorder()
+	server.Routes().ServeHTTP(commandResponse, commandRequest)
+	if commandResponse.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", commandResponse.Code, commandResponse.Body.String())
+	}
+
+	var result docker.ConsoleCommandResult
+	if err := json.NewDecoder(commandResponse.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode command response: %v", err)
+	}
+
+	if result.Command != "say hello" || len(result.Output) == 0 {
+		t.Fatalf("unexpected command response: %+v", result)
+	}
+}
