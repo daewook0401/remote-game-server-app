@@ -5,6 +5,7 @@ interface ServerRegistrationPanelProps {
   isFirewallConfirming: boolean;
   onChange: (form: ServerRegistrationForm) => void;
   onOpenFirewallPort: () => void;
+  onUpdateAgent: () => void;
   onPrepareAgent: () => void;
   onSubmit: () => void;
   onTestSSH: () => void;
@@ -30,6 +31,7 @@ export function ServerRegistrationPanel({
   isFirewallConfirming,
   onChange,
   onOpenFirewallPort,
+  onUpdateAgent,
   onPrepareAgent,
   onSubmit,
   onTestSSH
@@ -189,7 +191,10 @@ export function ServerRegistrationPanel({
               SSH 확인
             </button>
             <button className="primaryButton fullWidthButton" onClick={onPrepareAgent} type="button">
-              Agent 설치/업데이트
+              Agent 설치
+            </button>
+            <button className="secondaryButton fullWidthButton" onClick={onUpdateAgent} type="button">
+              Agent 업데이트
             </button>
             <button
               className={isFirewallConfirming ? "secondaryButton fullWidthButton warningButton" : "secondaryButton fullWidthButton"}

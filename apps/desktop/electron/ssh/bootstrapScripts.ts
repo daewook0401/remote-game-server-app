@@ -15,6 +15,7 @@ export function agentPrepareCommand(request: AgentPrepareRequest) {
     "AGENT_ADDR=0.0.0.0:18080",
     "AGENT_DOCKER_MODE=cli",
     "AGENT_DOCKER_PATH=docker",
+    "AGENT_STATE_FILE=/opt/remote-game-agent/data/servers.json",
     ""
   ].join("\n");
   const serviceContent = [
@@ -39,10 +40,12 @@ export function agentPrepareCommand(request: AgentPrepareRequest) {
     "AGENT_DIR=/opt/remote-game-agent;",
     "AGENT_BIN=$AGENT_DIR/agent;",
     "AGENT_TMP=$AGENT_DIR/agent.new;",
+    "AGENT_DATA_DIR=$AGENT_DIR/data;",
     "SERVICE_FILE=/etc/systemd/system/remote-game-agent.service;",
     `DOWNLOAD_URL=${shellSingleQuote(request.downloadUrl)};`,
     "if [ \"$(id -u)\" -ne 0 ]; then SUDO='sudo -S'; else SUDO=; fi;",
     "$SUDO mkdir -p $AGENT_DIR;",
+    "$SUDO mkdir -p $AGENT_DATA_DIR;",
     "if command -v curl >/dev/null 2>&1; then $SUDO curl -fsSL \"$DOWNLOAD_URL\" -o $AGENT_TMP;",
     "elif command -v wget >/dev/null 2>&1; then $SUDO wget -q \"$DOWNLOAD_URL\" -O $AGENT_TMP;",
     "else echo 'DOWNLOAD_TOOL_MISSING=true'; exit 12;",

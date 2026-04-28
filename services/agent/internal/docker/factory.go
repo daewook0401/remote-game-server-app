@@ -12,5 +12,10 @@ func NewServiceFromEnvironment() *Service {
 		dockerPath = "docker"
 	}
 
-	return NewService(NewCLIAdapter(dockerPath))
+	stateFile := os.Getenv("AGENT_STATE_FILE")
+	if stateFile == "" {
+		stateFile = "/opt/remote-game-agent/data/servers.json"
+	}
+
+	return NewService(NewCLIAdapter(dockerPath, stateFile))
 }

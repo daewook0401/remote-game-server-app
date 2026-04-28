@@ -2,18 +2,22 @@ package docker
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
 type CLIAdapter struct {
 	dockerPath string
+	stateFile  string
 }
 
-func NewCLIAdapter(dockerPath string) *CLIAdapter {
-	return &CLIAdapter{dockerPath: dockerPath}
+func NewCLIAdapter(dockerPath string, stateFile string) *CLIAdapter {
+	return &CLIAdapter{dockerPath: dockerPath, stateFile: stateFile}
 }
 
 func (adapter *CLIAdapter) Status() DockerStatus {
@@ -36,10 +40,17 @@ func (adapter *CLIAdapter) ListManagedContainers() ([]ContainerSummary, error) {
 	args := BuildManagedContainerListArgs()
 	output, err := exec.Command(adapter.dockerPath, args...).CombinedOutput()
 	if err != nil {
+		containers, stateErr := adapter.loadManagedState()
+		if stateErr == nil {
+			return containers, nil
+		}
+
 		return nil, errors.New(strings.TrimSpace(string(output)))
 	}
 
-	return ParseManagedContainerRows(output), nil
+	containers := ParseManagedContainerRows(output)
+	_ = adapter.saveManagedState(containers)
+	return containers, nil
 }
 
 func (adapter *CLIAdapter) CreateMinecraftServer(request CreateMinecraftServerRequest) (ContainerSummary, error) {
@@ -53,14 +64,16 @@ func (adapter *CLIAdapter) CreateMinecraftServer(request CreateMinecraftServerRe
 		return ContainerSummary{}, errors.New(strings.TrimSpace(string(output)))
 	}
 
-	return ContainerSummary{
+	container := ContainerSummary{
 		ID:         strings.TrimSpace(string(output)),
 		Name:       request.ContainerName,
 		Image:      request.Image,
 		Status:     "running",
 		Port:       request.ExternalPort,
 		InstanceID: request.InstanceID,
-	}, nil
+	}
+	_ = adapter.upsertManagedState(container)
+	return container, nil
 }
 
 func (adapter *CLIAdapter) ApplyAction(request ContainerActionRequest) (ContainerSummary, error) {
@@ -71,6 +84,10 @@ func (adapter *CLIAdapter) ApplyAction(request ContainerActionRequest) (Containe
 
 	if output, err := exec.Command(adapter.dockerPath, args...).CombinedOutput(); err != nil {
 		return ContainerSummary{}, errors.New(strings.TrimSpace(string(output)))
+	}
+
+	if request.Action == ContainerActionDelete {
+		_ = adapter.removeManagedState(request.ContainerID)
 	}
 
 	status := "running"
@@ -98,6 +115,74 @@ func (adapter *CLIAdapter) ConsoleSnapshot(request ConsoleAttachRequest) Console
 		ContainerID: request.ContainerID,
 		Lines:       splitLines(output),
 	}
+}
+
+func (adapter *CLIAdapter) loadManagedState() ([]ContainerSummary, error) {
+	if adapter.stateFile == "" {
+		return nil, errors.New("agent state file is not configured")
+	}
+
+	content, err := os.ReadFile(adapter.stateFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var containers []ContainerSummary
+	if err := json.Unmarshal(content, &containers); err != nil {
+		return nil, err
+	}
+
+	return containers, nil
+}
+
+func (adapter *CLIAdapter) saveManagedState(containers []ContainerSummary) error {
+	if adapter.stateFile == "" {
+		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(adapter.stateFile), 0o755); err != nil {
+		return err
+	}
+
+	content, err := json.MarshalIndent(containers, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(adapter.stateFile, content, 0o644)
+}
+
+func (adapter *CLIAdapter) upsertManagedState(container ContainerSummary) error {
+	containers, err := adapter.loadManagedState()
+	if err != nil {
+		containers = []ContainerSummary{}
+	}
+
+	next := make([]ContainerSummary, 0, len(containers)+1)
+	for _, current := range containers {
+		if current.ID != container.ID && current.Name != container.Name {
+			next = append(next, current)
+		}
+	}
+
+	next = append(next, container)
+	return adapter.saveManagedState(next)
+}
+
+func (adapter *CLIAdapter) removeManagedState(containerID string) error {
+	containers, err := adapter.loadManagedState()
+	if err != nil {
+		return err
+	}
+
+	next := make([]ContainerSummary, 0, len(containers))
+	for _, container := range containers {
+		if container.ID != containerID && container.Name != containerID {
+			next = append(next, container)
+		}
+	}
+
+	return adapter.saveManagedState(next)
 }
 
 func BuildManagedContainerListArgs() []string {

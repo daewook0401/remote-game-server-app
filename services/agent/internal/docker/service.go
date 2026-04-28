@@ -1,6 +1,6 @@
 package docker
 
-const AgentVersion = "0.1.1"
+const AgentVersion = "0.1.2"
 
 type Service struct {
 	adapter Adapter

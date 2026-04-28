@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { AgentStatusPanel } from "../components/AgentStatusPanel";
+import { AppModal } from "../components/AppModal";
 import { ContainerTable } from "../components/ContainerTable";
 import { DockerInstallGuide } from "../components/DockerInstallGuide";
 import { ServerCreatePanel } from "../components/ServerCreatePanel";
 import { ServerCreateReadinessPanel } from "../components/ServerCreateReadinessPanel";
 import { ServerCard } from "../components/ServerCard";
 import { ServerRegistrationPanel } from "../components/ServerRegistrationPanel";
+import { ToastViewport, type ToastMessage } from "../components/ToastViewport";
 import { Topbar } from "../components/Topbar";
 import { gameTemplates, managedServers as initialManagedServers } from "../data/serverManagement";
 import {
@@ -70,6 +72,9 @@ export function ServerManagementPage() {
   const [pendingCreate, setPendingCreate] = useState(false);
   const [pendingAction, setPendingAction] = useState<ContainerActionRequest>();
   const [pendingFirewallOpen, setPendingFirewallOpen] = useState(false);
+  const [agentUpdateModalOpen, setAgentUpdateModalOpen] = useState(false);
+  const [agentUpdatePassword, setAgentUpdatePassword] = useState("");
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [dockerGuide, setDockerGuide] = useState<{ issue: DockerIssue; osType: ServerOsType }>();
   const activeServer = managedServers.find((server) => server.id === activeServerId) ?? managedServers[0];
   const activeAgentBaseUrl = activeServer?.agentBaseUrl;
@@ -77,6 +82,24 @@ export function ServerManagementPage() {
   const isCliMode = dockerStatus?.mode === "cli";
   const isAgentVersionCurrent = dockerStatus?.agentVersion === EXPECTED_AGENT_VERSION;
   const createReadiness = buildCreateReadiness();
+
+  useEffect(() => {
+    if (message === "Agent API 대기") {
+      return;
+    }
+
+    const toast: ToastMessage = {
+      id: Date.now(),
+      kind: noticeKind,
+      text: message
+    };
+    setToasts((current) => [...current.slice(-2), toast]);
+    const timer = window.setTimeout(() => {
+      setToasts((current) => current.filter((item) => item.id !== toast.id));
+    }, 3600);
+
+    return () => window.clearTimeout(timer);
+  }, [message, noticeKind]);
 
   useEffect(() => {
     let ignore = false;
@@ -390,7 +413,8 @@ export function ServerManagementPage() {
     }
   }
 
-  async function handlePrepareAgent() {
+  async function handlePrepareAgent(passwordOverride?: string) {
+    const sshPassword = passwordOverride ?? registrationForm.sshPassword;
     if (registrationForm.targetType === "local") {
       setNoticeKind("info");
       setMessage("로컬 서버는 Agent 준비가 필요하지 않습니다.");
@@ -415,7 +439,7 @@ export function ServerManagementPage() {
       return;
     }
 
-    if (registrationForm.sshAuthMethod === "password" && !registrationForm.sshPassword) {
+    if (registrationForm.sshAuthMethod === "password" && !sshPassword) {
       setNoticeKind("error");
       setMessage("패스워드 인증을 선택한 경우 SSH password가 필요합니다.");
       return;
@@ -435,7 +459,7 @@ export function ServerManagementPage() {
         port: registrationForm.sshPort,
         username: registrationForm.sshUser,
         authMethod: registrationForm.sshAuthMethod,
-        password: registrationForm.sshAuthMethod === "password" ? registrationForm.sshPassword : undefined,
+        password: registrationForm.sshAuthMethod === "password" ? sshPassword : undefined,
         keyPath: registrationForm.sshAuthMethod === "key" ? registrationForm.sshKeyPath : undefined,
         expectedOs: registrationForm.osType,
         agentToken: registrationForm.agentToken || undefined,
@@ -475,6 +499,29 @@ export function ServerManagementPage() {
       setNoticeKind("error");
       setMessage(error instanceof Error ? error.message : "Agent 준비 실패");
     }
+  }
+
+  function handleRequestAgentUpdate() {
+    if (registrationForm.targetType === "local") {
+      setNoticeKind("info");
+      setMessage("로컬 서버는 Agent 업데이트가 필요하지 않습니다.");
+      return;
+    }
+
+    setAgentUpdatePassword("");
+    setAgentUpdateModalOpen(true);
+  }
+
+  async function handleConfirmAgentUpdate() {
+    if (!agentUpdatePassword) {
+      setNoticeKind("error");
+      setMessage("Agent 업데이트를 위해 SSH 비밀번호를 입력하세요.");
+      return;
+    }
+
+    setAgentUpdateModalOpen(false);
+    setRegistrationForm((current) => ({ ...current, sshPassword: agentUpdatePassword, sshAuthMethod: "password" }));
+    await handlePrepareAgent(agentUpdatePassword);
   }
 
   async function handleOpenFirewallPort() {
@@ -876,6 +923,7 @@ export function ServerManagementPage() {
 
   return (
     <>
+      <ToastViewport messages={toasts} />
       <Topbar
         actionLabel="Agent 상태 확인"
         secondaryActionLabel="컨테이너 새로고침"
@@ -884,8 +932,6 @@ export function ServerManagementPage() {
         onSecondaryAction={refreshContainers}
         title="서버 관리"
       />
-
-      <div className={`noticeBar ${noticeKind}`}>{message}</div>
 
       <article className="contextPanel">
         <span>선택된 서버</span>
@@ -940,9 +986,36 @@ export function ServerManagementPage() {
         onChange={setRegistrationForm}
         onOpenFirewallPort={handleOpenFirewallPort}
         onPrepareAgent={handlePrepareAgent}
+        onUpdateAgent={handleRequestAgentUpdate}
         onSubmit={handleRegisterServer}
         onTestSSH={handleTestSSHInput}
       />
+
+      {agentUpdateModalOpen ? (
+        <AppModal onClose={() => setAgentUpdateModalOpen(false)} title="Agent 업데이트">
+          <p className="helperText">
+            저장된 SSH 서버에 접속해 기존 Agent를 중지하고 새 Agent로 교체합니다. 게임 서버 정보 파일은 유지됩니다.
+          </p>
+          <label className="fieldGroup">
+            <span>SSH password</span>
+            <input
+              autoFocus
+              className="textInput"
+              onChange={(event) => setAgentUpdatePassword(event.target.value)}
+              type="password"
+              value={agentUpdatePassword}
+            />
+          </label>
+          <div className="modalActions">
+            <button className="secondaryButton" onClick={() => setAgentUpdateModalOpen(false)} type="button">
+              취소
+            </button>
+            <button className="primaryButton" onClick={handleConfirmAgentUpdate} type="button">
+              업데이트
+            </button>
+          </div>
+        </AppModal>
+      ) : null}
 
       {dockerGuide ? <DockerInstallGuide issue={dockerGuide.issue} osType={dockerGuide.osType} /> : null}
 
