@@ -10,30 +10,14 @@ export function agentPrepareCommand(request: AgentPrepareRequest) {
   }
 
   const token = request.agentToken ?? "";
-  return [
-    "set -eu;",
-    "AGENT_DIR=/opt/remote-game-agent;",
-    "AGENT_BIN=$AGENT_DIR/agent;",
-    "AGENT_TMP=$AGENT_DIR/agent.new;",
-    "SERVICE_FILE=/etc/systemd/system/remote-game-agent.service;",
-    `DOWNLOAD_URL=${shellSingleQuote(request.downloadUrl)};`,
-    `AGENT_TOKEN_VALUE=${shellSingleQuote(token)};`,
-    "if [ \"$(id -u)\" -ne 0 ]; then SUDO='sudo -S -p \"\"'; else SUDO=; fi;",
-    "$SUDO mkdir -p $AGENT_DIR;",
-    "if command -v curl >/dev/null 2>&1; then $SUDO curl -fsSL \"$DOWNLOAD_URL\" -o $AGENT_TMP;",
-    "elif command -v wget >/dev/null 2>&1; then $SUDO wget -q \"$DOWNLOAD_URL\" -O $AGENT_TMP;",
-    "else echo 'DOWNLOAD_TOOL_MISSING=true'; exit 12;",
-    "fi;",
-    "echo 'AGENT_DOWNLOADED=true';",
-    "$SUDO chmod +x $AGENT_TMP;",
-    "$SUDO sh -c \"cat > $AGENT_DIR/.env\" <<EOF",
-    "AGENT_TOKEN=$AGENT_TOKEN_VALUE",
+  const envContent = [
+    `AGENT_TOKEN=${token}`,
     "AGENT_ADDR=0.0.0.0:18080",
     "AGENT_DOCKER_MODE=cli",
     "AGENT_DOCKER_PATH=docker",
-    "EOF",
-    "if command -v systemctl >/dev/null 2>&1; then",
-    "  $SUDO sh -c \"cat > $SERVICE_FILE\" <<EOF",
+    ""
+  ].join("\n");
+  const serviceContent = [
     "[Unit]",
     "Description=Remote Game Server Agent",
     "After=network.target docker.service",
@@ -47,7 +31,27 @@ export function agentPrepareCommand(request: AgentPrepareRequest) {
     "",
     "[Install]",
     "WantedBy=multi-user.target",
-    "EOF",
+    ""
+  ].join("\n");
+
+  return [
+    "set -eu;",
+    "AGENT_DIR=/opt/remote-game-agent;",
+    "AGENT_BIN=$AGENT_DIR/agent;",
+    "AGENT_TMP=$AGENT_DIR/agent.new;",
+    "SERVICE_FILE=/etc/systemd/system/remote-game-agent.service;",
+    `DOWNLOAD_URL=${shellSingleQuote(request.downloadUrl)};`,
+    "if [ \"$(id -u)\" -ne 0 ]; then SUDO='sudo -S'; else SUDO=; fi;",
+    "$SUDO mkdir -p $AGENT_DIR;",
+    "if command -v curl >/dev/null 2>&1; then $SUDO curl -fsSL \"$DOWNLOAD_URL\" -o $AGENT_TMP;",
+    "elif command -v wget >/dev/null 2>&1; then $SUDO wget -q \"$DOWNLOAD_URL\" -O $AGENT_TMP;",
+    "else echo 'DOWNLOAD_TOOL_MISSING=true'; exit 12;",
+    "fi;",
+    "echo 'AGENT_DOWNLOADED=true';",
+    "$SUDO chmod +x $AGENT_TMP;",
+    `printf %s ${shellSingleQuote(envContent)} | $SUDO tee $AGENT_DIR/.env >/dev/null;`,
+    "if command -v systemctl >/dev/null 2>&1; then",
+    `  printf %s ${shellSingleQuote(serviceContent)} | $SUDO tee $SERVICE_FILE >/dev/null;`,
     "  $SUDO systemctl daemon-reload;",
     "  $SUDO systemctl enable remote-game-agent >/dev/null 2>&1 || true;",
     "  $SUDO systemctl stop remote-game-agent >/dev/null 2>&1 || true;",
