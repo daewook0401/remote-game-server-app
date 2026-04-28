@@ -3,6 +3,7 @@ import type { ManagedServer } from "../types/server";
 interface ServerCardProps {
   isSelected: boolean;
   onCheck: (serverId: string) => void;
+  onDelete: (serverId: string) => void;
   onSelect: (serverId: string) => void;
   server: ManagedServer;
 }
@@ -13,7 +14,7 @@ const statusLabels: Record<ManagedServer["status"], string> = {
   offline: "오프라인"
 };
 
-export function ServerCard({ isSelected, onCheck, onSelect, server }: ServerCardProps) {
+export function ServerCard({ isSelected, onCheck, onDelete, onSelect, server }: ServerCardProps) {
   return (
     <article className={isSelected ? "panel serverCard selected" : "panel serverCard"}>
       <div className="panelHeader">
@@ -56,6 +57,9 @@ export function ServerCard({ isSelected, onCheck, onSelect, server }: ServerCard
         </button>
         <button className="primaryButton compactButton" onClick={() => onCheck(server.id)} type="button">
           Agent 확인
+        </button>
+        <button className="smallButton danger" onClick={() => onDelete(server.id)} type="button">
+          삭제
         </button>
       </div>
     </article>

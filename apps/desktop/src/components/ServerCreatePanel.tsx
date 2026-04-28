@@ -1,12 +1,13 @@
 import type { ServerCreateForm } from "../types/server";
 
 interface ServerCreatePanelProps {
+  disabled?: boolean;
   form: ServerCreateForm;
   onChange: (form: ServerCreateForm) => void;
   onSubmit: () => void;
 }
 
-export function ServerCreatePanel({ form, onChange, onSubmit }: ServerCreatePanelProps) {
+export function ServerCreatePanel({ disabled, form, onChange, onSubmit }: ServerCreatePanelProps) {
   function update<T extends keyof ServerCreateForm>(key: T, value: ServerCreateForm[T]) {
     onChange({ ...form, [key]: value });
   }
@@ -77,7 +78,7 @@ export function ServerCreatePanel({ form, onChange, onSubmit }: ServerCreatePane
         Minecraft EULA에 동의하고 서버 생성을 진행합니다.
       </label>
 
-      <button className="primaryButton fullWidthButton" onClick={onSubmit} type="button">
+      <button className="primaryButton fullWidthButton" disabled={disabled} onClick={onSubmit} type="button">
         서버 생성
       </button>
     </article>

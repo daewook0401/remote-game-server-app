@@ -3,6 +3,7 @@ import { AgentStatusPanel } from "../components/AgentStatusPanel";
 import { ContainerTable } from "../components/ContainerTable";
 import { DockerInstallGuide } from "../components/DockerInstallGuide";
 import { ServerCreatePanel } from "../components/ServerCreatePanel";
+import { ServerCreateReadinessPanel } from "../components/ServerCreateReadinessPanel";
 import { ServerCard } from "../components/ServerCard";
 import { ServerRegistrationPanel } from "../components/ServerRegistrationPanel";
 import { Topbar } from "../components/Topbar";
@@ -17,7 +18,15 @@ import { prepareRemoteAgent } from "../services/agentBootstrapClient";
 import { loadStoredServers, saveStoredServers } from "../services/serverStorage";
 import { testSSHConnection } from "../services/sshClient";
 import type { ContainerActionRequest, ContainerSummaryResponse, DockerStatusResponse } from "../types/api";
-import type { ContainerSummary, DockerIssue, ManagedServer, ServerCreateForm, ServerOsType, ServerRegistrationForm } from "../types/server";
+import type {
+  ContainerSummary,
+  DockerIssue,
+  ManagedServer,
+  ServerCreateForm,
+  ServerCreateReadiness,
+  ServerOsType,
+  ServerRegistrationForm
+} from "../types/server";
 
 type NoticeKind = "info" | "success" | "warning" | "error";
 
@@ -62,6 +71,7 @@ export function ServerManagementPage() {
   const activeAgentBaseUrl = activeServer?.agentBaseUrl;
   const activeAgentToken = activeServer?.agentToken;
   const isCliMode = dockerStatus?.mode === "cli";
+  const createReadiness = buildCreateReadiness();
 
   useEffect(() => {
     let ignore = false;
@@ -115,6 +125,12 @@ export function ServerManagementPage() {
   }
 
   async function handleCreateServer() {
+    if (!createReadiness.canCreate) {
+      setNoticeKind("error");
+      setMessage(createReadiness.message);
+      return;
+    }
+
     if (!activeServer) {
       setNoticeKind("error");
       setMessage("서버를 먼저 선택해야 합니다.");
@@ -164,6 +180,7 @@ export function ServerManagementPage() {
       }, activeAgentBaseUrl, activeAgentToken);
       upsertContainer(container);
       void refreshContainers();
+      updateServerAfterContainerCreate(activeServer.id);
       setPendingCreate(false);
       setNoticeKind(isCliMode ? "success" : "warning");
       setMessage(`${container.name} 생성 요청 성공`);
@@ -468,6 +485,64 @@ export function ServerManagementPage() {
     };
   }
 
+  function buildCreateReadiness(): ServerCreateReadiness {
+    const selectedServer = Boolean(activeServer);
+    const agentChecked = Boolean(dockerStatus?.available);
+    const dockerReady = dockerStatus?.mode === "cli";
+    const hasServerName = createForm.serverName.trim().length > 0;
+    const validPorts = createForm.internalPort > 0 && createForm.externalPort > 0;
+    const eulaAccepted = createForm.eulaAccepted;
+    const targetReady = activeServer?.targetType === "local" || activeServer?.agentStatus === "connected";
+
+    const items = [
+      { label: "서버 선택", ok: selectedServer },
+      { label: "Agent 상태 확인", ok: agentChecked },
+      { label: "실제 Docker mode", ok: dockerReady },
+      { label: "원격/클라우드 Agent 연결", ok: Boolean(targetReady) },
+      { label: "서버 이름 입력", ok: hasServerName },
+      { label: "포트 입력", ok: validPorts },
+      { label: "Minecraft EULA 동의", ok: eulaAccepted }
+    ];
+
+    const canCreate =
+      selectedServer && agentChecked && dockerReady && hasServerName && validPorts && eulaAccepted && Boolean(targetReady);
+
+    if (!selectedServer) {
+      return { canCreate: false, items, message: "서버를 먼저 선택하세요." };
+    }
+
+    if (!agentChecked) {
+      return { canCreate: false, items, message: "Agent 상태 확인을 먼저 실행하세요." };
+    }
+
+    if (!dockerReady) {
+      return { canCreate: false, items, message: "실제 Docker CLI mode가 확인되어야 Minecraft 서버를 생성할 수 있습니다." };
+    }
+
+    if (!targetReady) {
+      return { canCreate: false, items, message: "원격/클라우드 서버는 Agent 준비 또는 Agent 확인이 필요합니다." };
+    }
+
+    if (!hasServerName || !validPorts || !eulaAccepted) {
+      return { canCreate: false, items, message: "서버 이름, 포트, EULA 동의를 확인하세요." };
+    }
+
+    return { canCreate, items, message: "서버 생성을 진행할 수 있습니다." };
+  }
+
+  function updateServerAfterContainerCreate(serverId: string) {
+    setManagedServers((current) =>
+      current.map((server) =>
+        server.id === serverId
+          ? {
+              ...server,
+              lastAgentPrepareMessage: "Minecraft 생성 요청 완료"
+            }
+          : server
+      )
+    );
+  }
+
   function dockerMessage(issue: DockerIssue) {
     if (issue === "none") return "준비됨";
     if (issue === "notInstalled") return "미설치";
@@ -583,6 +658,22 @@ export function ServerManagementPage() {
     setMessage(server ? `${server.name} 선택됨. Agent 확인 후 컨테이너를 관리하세요.` : "서버 선택됨");
   }
 
+  function handleDeleteServer(serverId: string) {
+    const server = managedServers.find((item) => item.id === serverId);
+    const nextServers = managedServers.filter((item) => item.id !== serverId);
+    setManagedServers(nextServers);
+
+    if (activeServerId === serverId) {
+      const nextActiveServer = nextServers[0];
+      setActiveServerId(nextActiveServer?.id ?? "");
+      setContainers([]);
+      setDockerStatus(undefined);
+    }
+
+    setNoticeKind("success");
+    setMessage(server ? `${server.name} 삭제됨` : "서버 삭제됨");
+  }
+
   function updateServerStatus(serverId: string, status: DockerStatusResponse, isConnected: boolean) {
     setManagedServers((current) =>
       current.map((server) =>
@@ -666,7 +757,14 @@ export function ServerManagementPage() {
         </article>
       ) : null}
 
-      <ServerCreatePanel form={createForm} onChange={setCreateForm} onSubmit={handleCreateServer} />
+      <ServerCreateReadinessPanel readiness={createReadiness} />
+
+      <ServerCreatePanel
+        disabled={!createReadiness.canCreate}
+        form={createForm}
+        onChange={setCreateForm}
+        onSubmit={handleCreateServer}
+      />
 
       <ServerRegistrationPanel
         form={registrationForm}
@@ -684,6 +782,7 @@ export function ServerManagementPage() {
             isSelected={server.id === activeServerId}
             key={server.id}
             onCheck={handleCheckServer}
+            onDelete={handleDeleteServer}
             onSelect={handleSelectServer}
             server={server}
           />

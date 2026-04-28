@@ -106,4 +106,14 @@ export interface ContainerSummary {
   image: string;
   status: "running" | "stopped";
   port: number;
+  instanceId?: string;
+}
+
+export interface ServerCreateReadiness {
+  canCreate: boolean;
+  items: Array<{
+    label: string;
+    ok: boolean;
+  }>;
+  message: string;
 }

@@ -30,13 +30,14 @@ export function ContainerTable({
             <th>이미지</th>
             <th>상태</th>
             <th>포트</th>
+            <th>인스턴스</th>
             <th>작업</th>
           </tr>
         </thead>
         <tbody>
           {containers.length === 0 ? (
             <tr>
-              <td colSpan={5}>생성된 컨테이너가 없습니다.</td>
+              <td colSpan={6}>생성된 컨테이너가 없습니다.</td>
             </tr>
           ) : (
             containers.map((container) => (
@@ -45,6 +46,7 @@ export function ContainerTable({
                 <td>{container.image || "-"}</td>
                 <td>{container.status}</td>
                 <td>{container.port || "-"}</td>
+                <td>{container.instanceId || "-"}</td>
                 <td>
                   <div className="tableActions">
                     <button
