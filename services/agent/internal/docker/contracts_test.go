@@ -77,6 +77,35 @@ func TestBuildMinecraftRunArgs(t *testing.T) {
 	}
 }
 
+func TestBuildMinecraftRunArgsUsesDefaultVolumePath(t *testing.T) {
+	request := CreateMinecraftServerRequest{
+		TargetType:     "remote",
+		GameTemplateID: "minecraft-java",
+		InstanceID:     "instance-1",
+		ContainerName:  "minecraft survival",
+		Image:          "itzg/minecraft-server",
+		InternalPort:   25565,
+		ExternalPort:   25580,
+		Memory:         "2G",
+		EulaAccepted:   true,
+	}
+
+	args := BuildMinecraftRunArgs(request)
+	joined := strings.Join(args, " ")
+
+	expectedParts := []string{
+		"--label remote-game-server.volumePath=/remote-game-server/volume/minecraft/minecraft-survival",
+		"-p 25580:25565",
+		"-v /remote-game-server/volume/minecraft/minecraft-survival:/data",
+	}
+
+	for _, expected := range expectedParts {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected docker args to contain %q, got %q", expected, joined)
+		}
+	}
+}
+
 func TestBuildManagedContainerListArgs(t *testing.T) {
 	args := BuildManagedContainerListArgs()
 	joined := strings.Join(args, " ")

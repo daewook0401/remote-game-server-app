@@ -64,3 +64,5 @@ Agent Docker 콘솔 로그 조회와 명령 전송 연결
 
 - 서버 생성 시 볼륨 경로가 실제 서버에 생성되지 않는 문제를 방지하기 위해 Agent가 Docker 실행 전에 `/remote-game-server/volume/...` 경로를 직접 생성하고 쓰기 권한을 보장하도록 수정한다.
 - 원격 서버 업데이트가 가능하도록 Agent/Desktop 기대 버전을 `0.1.5`로 올린다.
+- Desktop이 `volumePath`를 보내지 못한 경우에도 Agent가 Minecraft 컨테이너 이름으로 기본 볼륨 경로를 계산하도록 수정한다.
+- Agent/Desktop 기대 버전을 `0.1.6`으로 올린다.

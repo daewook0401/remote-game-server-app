@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -58,6 +59,7 @@ func (adapter *CLIAdapter) CreateMinecraftServer(request CreateMinecraftServerRe
 		return ContainerSummary{}, errors.New("minecraft eula must be accepted")
 	}
 
+	request = NormalizeMinecraftServerRequest(request)
 	if request.VolumePath != "" {
 		if err := ensureManagedVolumePath(request.VolumePath); err != nil {
 			return ContainerSummary{}, err
@@ -226,6 +228,7 @@ func BuildManagedContainerListArgs() []string {
 }
 
 func BuildMinecraftRunArgs(request CreateMinecraftServerRequest) []string {
+	request = NormalizeMinecraftServerRequest(request)
 	args := []string{
 		"run",
 		"-d",
@@ -246,6 +249,19 @@ func BuildMinecraftRunArgs(request CreateMinecraftServerRequest) []string {
 
 	args = append(args, request.Image)
 	return args
+}
+
+func NormalizeMinecraftServerRequest(request CreateMinecraftServerRequest) CreateMinecraftServerRequest {
+	if strings.TrimSpace(request.VolumePath) != "" {
+		request.VolumePath = cleanManagedVolumePath(request.VolumePath)
+		return request
+	}
+
+	if request.GameTemplateID == "minecraft-java" && strings.TrimSpace(request.ContainerName) != "" {
+		request.VolumePath = "/remote-game-server/volume/minecraft/" + sanitizePathSegment(request.ContainerName)
+	}
+
+	return request
 }
 
 func ParseManagedContainerRows(output []byte) []ContainerSummary {
@@ -282,7 +298,7 @@ func ParseManagedContainerRows(output []byte) []ContainerSummary {
 }
 
 func removeManagedVolumePath(volumePath string) error {
-	cleanPath := filepath.Clean(volumePath)
+	cleanPath := cleanManagedVolumePath(volumePath)
 	if !isSafeManagedVolumePath(cleanPath) {
 		return errors.New("refusing to delete unmanaged volume path")
 	}
@@ -291,7 +307,7 @@ func removeManagedVolumePath(volumePath string) error {
 }
 
 func ensureManagedVolumePath(volumePath string) error {
-	cleanPath := filepath.Clean(volumePath)
+	cleanPath := cleanManagedVolumePath(volumePath)
 	if !isSafeManagedVolumePath(cleanPath) {
 		return errors.New("refusing to create unmanaged volume path")
 	}
@@ -304,8 +320,36 @@ func ensureManagedVolumePath(volumePath string) error {
 }
 
 func isSafeManagedVolumePath(volumePath string) bool {
-	normalized := filepath.ToSlash(filepath.Clean(volumePath))
+	normalized := cleanManagedVolumePath(volumePath)
 	return strings.HasPrefix(normalized, "/remote-game-server/volume/") && len(strings.Split(strings.Trim(normalized, "/"), "/")) >= 4
+}
+
+func cleanManagedVolumePath(volumePath string) string {
+	return path.Clean(filepath.ToSlash(strings.TrimSpace(volumePath)))
+}
+
+func sanitizePathSegment(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "server"
+	}
+
+	var builder strings.Builder
+	for _, char := range trimmed {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' || char == '-' || char == '.' {
+			builder.WriteRune(char)
+			continue
+		}
+
+		builder.WriteRune('-')
+	}
+
+	result := strings.Trim(builder.String(), ".-")
+	if result == "" {
+		return "server"
+	}
+
+	return result
 }
 
 func BuildContainerActionArgs(request ContainerActionRequest) ([]string, error) {
