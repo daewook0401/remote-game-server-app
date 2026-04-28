@@ -261,6 +261,51 @@ button {
   min-height: 174px;
 }
 
+.serverCard.selected {
+  border-color: #0f766e;
+  box-shadow: inset 0 0 0 1px #0f766e;
+}
+
+.cardActions {
+  display: flex;
+  gap: 8px;
+}
+
+.compactButton {
+  height: 34px;
+  padding: 0 12px;
+}
+
+.contextPanel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.contextPanel span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.contextPanel strong,
+.contextPanel code {
+  overflow-wrap: anywhere;
+}
+
+.contextPanel code {
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: #334155;
+  background: #f1f5f9;
+}
+
 .stateBadge {
   padding: 4px 8px;
   border-radius: 999px;

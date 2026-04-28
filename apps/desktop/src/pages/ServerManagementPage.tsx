@@ -3,8 +3,9 @@ import { AgentStatusPanel } from "../components/AgentStatusPanel";
 import { ContainerTable } from "../components/ContainerTable";
 import { ServerCreatePanel } from "../components/ServerCreatePanel";
 import { ServerCard } from "../components/ServerCard";
+import { ServerRegistrationPanel } from "../components/ServerRegistrationPanel";
 import { Topbar } from "../components/Topbar";
-import { gameTemplates, managedServers } from "../data/serverManagement";
+import { gameTemplates, managedServers as initialManagedServers } from "../data/serverManagement";
 import {
   applyContainerAction,
   createMinecraftServer,
@@ -12,7 +13,7 @@ import {
   listManagedContainers
 } from "../services/agentClient";
 import type { ContainerActionRequest, ContainerSummaryResponse, DockerStatusResponse } from "../types/api";
-import type { ContainerSummary, ServerCreateForm } from "../types/server";
+import type { ContainerSummary, ManagedServer, ServerCreateForm, ServerRegistrationForm } from "../types/server";
 
 type NoticeKind = "info" | "success" | "warning" | "error";
 
@@ -21,6 +22,8 @@ export function ServerManagementPage() {
   const [noticeKind, setNoticeKind] = useState<NoticeKind>("info");
   const [dockerStatus, setDockerStatus] = useState<DockerStatusResponse>();
   const [containers, setContainers] = useState<ContainerSummary[]>([]);
+  const [managedServers, setManagedServers] = useState<ManagedServer[]>(initialManagedServers);
+  const [activeServerId, setActiveServerId] = useState("local");
   const [createForm, setCreateForm] = useState<ServerCreateForm>({
     targetType: "local",
     sshHost: "",
@@ -33,8 +36,18 @@ export function ServerManagementPage() {
     memory: "2G",
     eulaAccepted: true
   });
+  const [registrationForm, setRegistrationForm] = useState<ServerRegistrationForm>({
+    name: "새 원격 서버",
+    targetType: "remote",
+    sshHost: "",
+    sshPort: 22,
+    sshUser: "",
+    agentBaseUrl: "http://127.0.0.1:18080"
+  });
   const [pendingCreate, setPendingCreate] = useState(false);
   const [pendingAction, setPendingAction] = useState<ContainerActionRequest>();
+  const activeServer = managedServers.find((server) => server.id === activeServerId) ?? managedServers[0];
+  const activeAgentBaseUrl = activeServer?.agentBaseUrl;
   const isCliMode = dockerStatus?.mode === "cli";
 
   function upsertContainer(container: ContainerSummaryResponse) {
@@ -45,6 +58,12 @@ export function ServerManagementPage() {
   }
 
   async function handleCreateServer() {
+    if (!activeServer) {
+      setNoticeKind("error");
+      setMessage("서버를 먼저 선택해야 합니다.");
+      return;
+    }
+
     const template = gameTemplates.find((item) => item.id === createForm.gameTemplateId);
     if (!template) {
       setNoticeKind("error");
@@ -52,7 +71,7 @@ export function ServerManagementPage() {
       return;
     }
 
-    if (createForm.targetType !== "local" && (!createForm.sshHost || !createForm.sshUser)) {
+    if (activeServer.targetType !== "local" && (!activeServer.sshHost || !activeServer.sshUser)) {
       setNoticeKind("error");
       setMessage("SSH 서버 또는 클라우드 서버는 SSH host와 user가 필요합니다.");
       return;
@@ -72,11 +91,11 @@ export function ServerManagementPage() {
 
     try {
       const container = await createMinecraftServer({
-        serverId: createForm.targetType,
-        targetType: createForm.targetType,
-        sshHost: createForm.sshHost || undefined,
-        sshPort: createForm.targetType === "local" ? undefined : createForm.sshPort,
-        sshUser: createForm.sshUser || undefined,
+        serverId: activeServer.id,
+        targetType: activeServer.targetType,
+        sshHost: activeServer.sshHost || createForm.sshHost || undefined,
+        sshPort: activeServer.targetType === "local" ? undefined : activeServer.sshPort ?? createForm.sshPort,
+        sshUser: activeServer.sshUser || createForm.sshUser || undefined,
         gameTemplateId: template.id,
         instanceId: `${template.id}-${createForm.serverName}`,
         containerName: createForm.serverName,
@@ -85,7 +104,7 @@ export function ServerManagementPage() {
         externalPort: createForm.externalPort,
         memory: createForm.memory,
         eulaAccepted: createForm.eulaAccepted
-      });
+      }, activeAgentBaseUrl);
       upsertContainer(container);
       void refreshContainers();
       setPendingCreate(false);
@@ -103,7 +122,7 @@ export function ServerManagementPage() {
     action: ContainerActionRequest["action"]
   ) {
     try {
-      const container = await applyContainerAction({ containerId, action });
+      const container = await applyContainerAction({ containerId, action }, activeAgentBaseUrl);
 
       if (action === "delete") {
         setContainers((current) => current.filter((item) => item.id !== containerId));
@@ -140,30 +159,145 @@ export function ServerManagementPage() {
   }
 
   async function handleCheckAgent() {
+    if (!activeServer) {
+      setNoticeKind("error");
+      setMessage("서버를 먼저 선택해야 합니다.");
+      return;
+    }
+
     try {
-      const status = await getDockerStatus();
+      const status = await getDockerStatus(activeServer.agentBaseUrl);
       setDockerStatus(status);
-      const managedContainers = await listManagedContainers();
+      const managedContainers = await listManagedContainers(activeServer.agentBaseUrl);
       setContainers(managedContainers);
+      updateServerStatus(activeServer.id, status, true);
       setNoticeKind(status.mode === "cli" ? "success" : "warning");
-      setMessage(`Agent 확인 완료: ${status.mode} mode, 컨테이너 ${managedContainers.length}개`);
+      setMessage(`${activeServer.name} Agent 확인 완료: ${status.mode} mode, 컨테이너 ${managedContainers.length}개`);
     } catch (error) {
       setDockerStatus(undefined);
+      updateServerOffline(activeServer.id);
       setNoticeKind("error");
       setMessage(error instanceof Error ? error.message : "Agent 상태 확인 실패");
     }
   }
 
   async function refreshContainers() {
+    if (!activeServer) {
+      setNoticeKind("error");
+      setMessage("서버를 먼저 선택해야 합니다.");
+      return;
+    }
+
     try {
-      const managedContainers = await listManagedContainers();
+      const managedContainers = await listManagedContainers(activeServer.agentBaseUrl);
       setContainers(managedContainers);
       setNoticeKind("success");
-      setMessage(`Docker 컨테이너 목록 갱신 완료: ${managedContainers.length}개`);
+      setMessage(`${activeServer.name} Docker 컨테이너 목록 갱신 완료: ${managedContainers.length}개`);
     } catch (error) {
       setNoticeKind("error");
       setMessage(error instanceof Error ? error.message : "컨테이너 목록 조회 실패");
     }
+  }
+
+  function handleRegisterServer() {
+    if (!registrationForm.name || !registrationForm.agentBaseUrl) {
+      setNoticeKind("error");
+      setMessage("서버 이름과 Agent URL이 필요합니다.");
+      return;
+    }
+
+    if (registrationForm.targetType !== "local" && (!registrationForm.sshHost || !registrationForm.sshUser)) {
+      setNoticeKind("error");
+      setMessage("SSH 서버 또는 클라우드 서버는 SSH host와 user가 필요합니다.");
+      return;
+    }
+
+    const nextServer: ManagedServer = {
+      id: `${registrationForm.targetType}-${Date.now()}`,
+      name: registrationForm.name,
+      targetType: registrationForm.targetType,
+      host:
+        registrationForm.targetType === "local"
+          ? "localhost"
+          : `${registrationForm.sshUser}@${registrationForm.sshHost}:${registrationForm.sshPort}`,
+      agentBaseUrl: registrationForm.agentBaseUrl,
+      sshHost: registrationForm.sshHost || undefined,
+      sshPort: registrationForm.targetType === "local" ? undefined : registrationForm.sshPort,
+      sshUser: registrationForm.sshUser || undefined,
+      status: "setupRequired",
+      agentStatus: "notInstalled",
+      dockerStatus: "unknown"
+    };
+
+    setManagedServers((current) => [...current, nextServer]);
+    setActiveServerId(nextServer.id);
+    setContainers([]);
+    setDockerStatus(undefined);
+    setNoticeKind("success");
+    setMessage(`${nextServer.name} 등록 완료. Agent 확인을 눌러 연결 상태를 확인하세요.`);
+  }
+
+  async function handleCheckServer(serverId: string) {
+    setActiveServerId(serverId);
+    const server = managedServers.find((item) => item.id === serverId);
+    if (!server) {
+      return;
+    }
+
+    try {
+      const status = await getDockerStatus(server.agentBaseUrl);
+      const managedContainers = await listManagedContainers(server.agentBaseUrl);
+      setDockerStatus(status);
+      setContainers(managedContainers);
+      updateServerStatus(server.id, status, true);
+      setNoticeKind(status.mode === "cli" ? "success" : "warning");
+      setMessage(`${server.name} Agent 확인 완료: ${status.mode} mode, 컨테이너 ${managedContainers.length}개`);
+    } catch (error) {
+      setDockerStatus(undefined);
+      setContainers([]);
+      updateServerOffline(server.id);
+      setNoticeKind("error");
+      setMessage(error instanceof Error ? error.message : "Agent 상태 확인 실패");
+    }
+  }
+
+  function handleSelectServer(serverId: string) {
+    const server = managedServers.find((item) => item.id === serverId);
+    setActiveServerId(serverId);
+    setContainers([]);
+    setDockerStatus(undefined);
+    setNoticeKind("info");
+    setMessage(server ? `${server.name} 선택됨. Agent 확인 후 컨테이너를 관리하세요.` : "서버 선택됨");
+  }
+
+  function updateServerStatus(serverId: string, status: DockerStatusResponse, isConnected: boolean) {
+    setManagedServers((current) =>
+      current.map((server) =>
+        server.id === serverId
+          ? {
+              ...server,
+              status: isConnected ? "connected" : "setupRequired",
+              agentStatus: isConnected ? "connected" : "offline",
+              dockerStatus: status.mode === "cli" ? "ready" : "needsSetup"
+            }
+          : server
+      )
+    );
+  }
+
+  function updateServerOffline(serverId: string) {
+    setManagedServers((current) =>
+      current.map((server) =>
+        server.id === serverId
+          ? {
+              ...server,
+              status: "offline",
+              agentStatus: "offline",
+              dockerStatus: "unknown"
+            }
+          : server
+      )
+    );
   }
 
   return (
@@ -178,6 +312,12 @@ export function ServerManagementPage() {
       />
 
       <div className={`noticeBar ${noticeKind}`}>{message}</div>
+
+      <article className="contextPanel">
+        <span>선택된 서버</span>
+        <strong>{activeServer?.name ?? "-"}</strong>
+        <code>{activeServer?.agentBaseUrl ?? "-"}</code>
+      </article>
 
       <section className="panelGrid">
         <AgentStatusPanel message={message} status={dockerStatus} />
@@ -215,9 +355,21 @@ export function ServerManagementPage() {
 
       <ServerCreatePanel form={createForm} onChange={setCreateForm} onSubmit={handleCreateServer} />
 
+      <ServerRegistrationPanel
+        form={registrationForm}
+        onChange={setRegistrationForm}
+        onSubmit={handleRegisterServer}
+      />
+
       <section className="modeGrid" aria-label="등록된 서버">
         {managedServers.map((server) => (
-          <ServerCard key={server.id} server={server} />
+          <ServerCard
+            isSelected={server.id === activeServerId}
+            key={server.id}
+            onCheck={handleCheckServer}
+            onSelect={handleSelectServer}
+            server={server}
+          />
         ))}
       </section>
 

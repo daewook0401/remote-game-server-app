@@ -6,6 +6,7 @@ export const managedServers: ManagedServer[] = [
     name: "내 로컬 서버",
     targetType: "local",
     host: "localhost",
+    agentBaseUrl: "http://127.0.0.1:18080",
     status: "connected",
     agentStatus: "connected",
     dockerStatus: "ready"
@@ -15,6 +16,10 @@ export const managedServers: ManagedServer[] = [
     name: "Amazon Minecraft 서버",
     targetType: "cloud",
     host: "ec2-user@203.0.113.10:22",
+    agentBaseUrl: "http://203.0.113.10:18080",
+    sshHost: "203.0.113.10",
+    sshPort: 22,
+    sshUser: "ec2-user",
     status: "setupRequired",
     agentStatus: "notInstalled",
     dockerStatus: "unknown"

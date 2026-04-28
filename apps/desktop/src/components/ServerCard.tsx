@@ -1,6 +1,9 @@
 import type { ManagedServer } from "../types/server";
 
 interface ServerCardProps {
+  isSelected: boolean;
+  onCheck: (serverId: string) => void;
+  onSelect: (serverId: string) => void;
   server: ManagedServer;
 }
 
@@ -10,9 +13,9 @@ const statusLabels: Record<ManagedServer["status"], string> = {
   offline: "오프라인"
 };
 
-export function ServerCard({ server }: ServerCardProps) {
+export function ServerCard({ isSelected, onCheck, onSelect, server }: ServerCardProps) {
   return (
-    <article className="panel serverCard">
+    <article className={isSelected ? "panel serverCard selected" : "panel serverCard"}>
       <div className="panelHeader">
         <h2>{server.name}</h2>
         <span className={`stateBadge ${server.status}`}>{statusLabels[server.status]}</span>
@@ -23,6 +26,10 @@ export function ServerCard({ server }: ServerCardProps) {
           <dd>{server.host}</dd>
         </div>
         <div>
+          <dt>Agent URL</dt>
+          <dd>{server.agentBaseUrl}</dd>
+        </div>
+        <div>
           <dt>Agent</dt>
           <dd>{server.agentStatus}</dd>
         </div>
@@ -31,7 +38,14 @@ export function ServerCard({ server }: ServerCardProps) {
           <dd>{server.dockerStatus}</dd>
         </div>
       </dl>
+      <div className="cardActions">
+        <button className="secondaryButton compactButton" onClick={() => onSelect(server.id)} type="button">
+          선택
+        </button>
+        <button className="primaryButton compactButton" onClick={() => onCheck(server.id)} type="button">
+          Agent 확인
+        </button>
+      </div>
     </article>
   );
 }
-

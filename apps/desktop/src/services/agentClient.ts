@@ -10,35 +10,44 @@ import { getJSON, postJSON } from "./httpClient";
 
 const AGENT_BASE_URL = "http://127.0.0.1:18080";
 
-export function getDockerStatus(): Promise<DockerStatusResponse> {
-  return getJSON<DockerStatusResponse>(`${AGENT_BASE_URL}/docker/status`);
+function agentUrl(path: string, baseUrl = AGENT_BASE_URL) {
+  return `${baseUrl.replace(/\/$/, "")}${path}`;
 }
 
-export function listManagedContainers(): Promise<ContainerSummaryResponse[]> {
-  return getJSON<ContainerSummaryResponse[]>(`${AGENT_BASE_URL}/docker/containers`);
+export function getDockerStatus(baseUrl?: string): Promise<DockerStatusResponse> {
+  return getJSON<DockerStatusResponse>(agentUrl("/docker/status", baseUrl));
+}
+
+export function listManagedContainers(baseUrl?: string): Promise<ContainerSummaryResponse[]> {
+  return getJSON<ContainerSummaryResponse[]>(agentUrl("/docker/containers", baseUrl));
 }
 
 export function createMinecraftServer(
-  payload: CreateMinecraftServerRequest
+  payload: CreateMinecraftServerRequest,
+  baseUrl?: string
 ): Promise<ContainerSummaryResponse> {
   return postJSON<ContainerSummaryResponse, CreateMinecraftServerRequest>(
-    `${AGENT_BASE_URL}/docker/minecraft`,
+    agentUrl("/docker/minecraft", baseUrl),
     payload
   );
 }
 
 export function applyContainerAction(
-  payload: ContainerActionRequest
+  payload: ContainerActionRequest,
+  baseUrl?: string
 ): Promise<ContainerSummaryResponse> {
   return postJSON<ContainerSummaryResponse, ContainerActionRequest>(
-    `${AGENT_BASE_URL}/docker/containers/action`,
+    agentUrl("/docker/containers/action", baseUrl),
     payload
   );
 }
 
-export function getConsoleSnapshot(payload: ConsoleAttachRequest): Promise<ConsoleSnapshotResponse> {
+export function getConsoleSnapshot(
+  payload: ConsoleAttachRequest,
+  baseUrl?: string
+): Promise<ConsoleSnapshotResponse> {
   return postJSON<ConsoleSnapshotResponse, ConsoleAttachRequest>(
-    `${AGENT_BASE_URL}/docker/containers/console`,
+    agentUrl("/docker/containers/console", baseUrl),
     payload
   );
 }

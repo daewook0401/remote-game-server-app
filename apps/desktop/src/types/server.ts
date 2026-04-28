@@ -7,6 +7,10 @@ export interface ManagedServer {
   name: string;
   targetType: ServerTargetType;
   host: string;
+  agentBaseUrl: string;
+  sshHost?: string;
+  sshPort?: number;
+  sshUser?: string;
   status: ServerStatus;
   agentStatus: "connected" | "notInstalled" | "offline";
   dockerStatus: "ready" | "needsSetup" | "unknown";
@@ -31,6 +35,15 @@ export interface ServerCreateForm {
   externalPort: number;
   memory: string;
   eulaAccepted: boolean;
+}
+
+export interface ServerRegistrationForm {
+  name: string;
+  targetType: ServerTargetType;
+  sshHost: string;
+  sshPort: number;
+  sshUser: string;
+  agentBaseUrl: string;
 }
 
 export interface ContainerSummary {
