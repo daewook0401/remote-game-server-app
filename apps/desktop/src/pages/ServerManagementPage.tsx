@@ -46,6 +46,11 @@ type DeleteTarget = {
 const AGENT_PORT = 18080;
 const PRODUCT_VOLUME_ROOT = "/remote-game-server/volume";
 
+function readServerDetailIdFromHash() {
+  const match = window.location.hash.match(/^#\/servers\/(.+)$/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 export function ServerManagementPage() {
   const [message, setMessage] = useState("Agent API 대기");
   const [noticeKind, setNoticeKind] = useState<NoticeKind>("info");
@@ -90,9 +95,12 @@ export function ServerManagementPage() {
   const [agentUpdatePassword, setAgentUpdatePassword] = useState("");
   const [serverRegistrationOpen, setServerRegistrationOpen] = useState(false);
   const [gameCreateOpen, setGameCreateOpen] = useState(false);
+  const [detailServerId, setDetailServerId] = useState(() => readServerDetailIdFromHash());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [dockerGuide, setDockerGuide] = useState<{ issue: DockerIssue; osType: ServerOsType }>();
-  const activeServer = managedServers.find((server) => server.id === activeServerId) ?? managedServers[0];
+  const detailServer = detailServerId ? managedServers.find((server) => server.id === detailServerId) : undefined;
+  const activeServer = detailServer ?? managedServers.find((server) => server.id === activeServerId) ?? managedServers[0];
+  const isServerDetailRoute = Boolean(detailServer);
   const activeAgentBaseUrl = activeServer?.agentBaseUrl;
   const activeAgentToken = activeServer?.agentToken;
   const isCliMode = dockerStatus?.mode === "cli";
@@ -118,6 +126,20 @@ export function ServerManagementPage() {
   function dismissToast(id: number) {
     setToasts((current) => current.filter((item) => item.id !== id));
   }
+
+  useEffect(() => {
+    function syncDetailRoute() {
+      const nextDetailServerId = readServerDetailIdFromHash();
+      setDetailServerId(nextDetailServerId);
+      if (nextDetailServerId) {
+        setActiveServerId(nextDetailServerId);
+      }
+    }
+
+    syncDetailRoute();
+    window.addEventListener("hashchange", syncDetailRoute);
+    return () => window.removeEventListener("hashchange", syncDetailRoute);
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -444,7 +466,7 @@ export function ServerManagementPage() {
     };
 
     setManagedServers((current) => [...current, nextServer]);
-    setActiveServerId(nextServer.id);
+    navigateToServerDetail(nextServer.id);
     setContainers([]);
     setDockerStatus(undefined);
     setServerRegistrationOpen(false);
@@ -1015,9 +1037,20 @@ export function ServerManagementPage() {
     }
   }
 
+  function navigateToServerDetail(serverId: string) {
+    setActiveServerId(serverId);
+    setDetailServerId(serverId);
+    window.location.hash = `#/servers/${encodeURIComponent(serverId)}`;
+  }
+
+  function navigateToServerList() {
+    setDetailServerId("");
+    window.location.hash = "#/servers";
+  }
+
   function handleSelectServer(serverId: string) {
     const server = managedServers.find((item) => item.id === serverId);
-    setActiveServerId(serverId);
+    navigateToServerDetail(serverId);
     if (server) {
       syncRegistrationFormFromServer(server);
     }
@@ -1060,6 +1093,10 @@ export function ServerManagementPage() {
       setDockerStatus(undefined);
     }
 
+    if (detailServerId === serverId) {
+      navigateToServerList();
+    }
+
     setNoticeKind("success");
     setMessage(server ? `${server.name} 삭제됨` : "서버 삭제됨");
   }
@@ -1099,14 +1136,16 @@ export function ServerManagementPage() {
       <ToastViewport messages={toasts} onDismiss={dismissToast} />
       <Topbar
         actionLabel="서버 추가"
-        secondaryActionLabel={activeServer ? "컨테이너 새로고침" : undefined}
-        description="먼저 서버를 선택하고, 선택한 서버 안에서 Agent와 Docker 게임 서버를 관리합니다."
+        description={
+          isServerDetailRoute
+            ? "선택한 서버 안에서 Agent, Docker, 게임 서버를 관리합니다."
+            : "먼저 서버를 선택하고, 들어가기 버튼으로 서버 관리 화면에 접근합니다."
+        }
         onAction={() => setServerRegistrationOpen(true)}
-        onSecondaryAction={activeServer ? refreshContainers : undefined}
-        title="서버 선택"
+        title={isServerDetailRoute && activeServer ? activeServer.name : "서버 선택"}
       />
 
-      {managedServers.length === 0 ? (
+      {!isServerDetailRoute && managedServers.length === 0 ? (
         <article className="panel emptyStatePanel">
           <h2>등록된 서버가 없습니다.</h2>
           <p>처음 실행했다면 서버를 먼저 추가하세요. 지금 PC, SSH 서버, 클라우드 서버 중 하나를 등록할 수 있습니다.</p>
@@ -1114,7 +1153,9 @@ export function ServerManagementPage() {
             서버 생성
           </button>
         </article>
-      ) : (
+      ) : null}
+
+      {!isServerDetailRoute && managedServers.length > 0 ? (
         <section className="modeGrid" aria-label="등록된 서버">
           {managedServers.map((server) => (
             <ServerCard
@@ -1127,14 +1168,17 @@ export function ServerManagementPage() {
             />
           ))}
         </section>
-      )}
+      ) : null}
 
-      {activeServer ? (
+      {isServerDetailRoute && activeServer ? (
         <>
           <article className="contextPanel">
             <span>선택된 서버</span>
             <strong>{activeServer.name}</strong>
             <code>{activeServer.agentBaseUrl}</code>
+            <button className="secondaryButton compactButton" onClick={navigateToServerList} type="button">
+              목록으로
+            </button>
           </article>
 
           <section className="panelGrid">
@@ -1177,6 +1221,7 @@ export function ServerManagementPage() {
             containers={containers}
             onAction={handleContainerAction}
             onAddContainer={() => setGameCreateOpen(true)}
+            onRefreshContainers={refreshContainers}
             onRequestAction={handleRequestContainerAction}
             pendingAction={pendingAction}
           />

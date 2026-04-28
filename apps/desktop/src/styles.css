@@ -167,6 +167,14 @@ button:disabled {
   font-size: 17px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .modeHeader span {
   padding: 4px 8px;
   border-radius: 999px;
@@ -454,7 +462,7 @@ button:disabled {
 
 .contextPanel {
   display: grid;
-  grid-template-columns: auto minmax(0, 220px) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 220px) minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   margin-bottom: 18px;

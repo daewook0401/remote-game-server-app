@@ -5,6 +5,7 @@ interface ContainerTableProps {
   containers: ContainerSummary[];
   pendingAction?: ContainerActionRequest;
   onAddContainer?: () => void;
+  onRefreshContainers?: () => void;
   onAction: (containerId: string, action: ContainerActionRequest["action"]) => void;
   onRequestAction: (containerId: string, action: ContainerActionRequest["action"]) => void;
 }
@@ -12,6 +13,7 @@ interface ContainerTableProps {
 export function ContainerTable({
   containers,
   onAddContainer,
+  onRefreshContainers,
   onAction,
   onRequestAction,
   pendingAction
@@ -24,11 +26,18 @@ export function ContainerTable({
     <article className="panel widePanel">
       <div className="panelHeader">
         <h2>Docker 컨테이너</h2>
-        {onAddContainer ? (
-          <button className="primaryButton compactButton" onClick={onAddContainer} type="button">
-            게임 서버 추가
-          </button>
-        ) : null}
+        <div className="headerActions">
+          {onRefreshContainers ? (
+            <button className="secondaryButton compactButton" onClick={onRefreshContainers} type="button">
+              새로고침
+            </button>
+          ) : null}
+          {onAddContainer ? (
+            <button className="primaryButton compactButton" onClick={onAddContainer} type="button">
+              게임 서버 추가
+            </button>
+          ) : null}
+        </div>
       </div>
       <table className="dataTable">
         <thead>
