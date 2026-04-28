@@ -9,7 +9,7 @@ import { ServerCard } from "../components/ServerCard";
 import { ServerRegistrationPanel } from "../components/ServerRegistrationPanel";
 import { ToastViewport, type ToastMessage } from "../components/ToastViewport";
 import { Topbar } from "../components/Topbar";
-import { gameTemplates, managedServers as initialManagedServers } from "../data/serverManagement";
+import { gameTemplates } from "../data/serverManagement";
 import {
   applyContainerAction,
   createMinecraftServer,
@@ -18,7 +18,7 @@ import {
   listManagedContainers
 } from "../services/agentClient";
 import { prepareRemoteAgent } from "../services/agentBootstrapClient";
-import { openRemoteFirewallPort } from "../services/firewallClient";
+import { closeRemoteFirewallPort, openRemoteFirewallPort } from "../services/firewallClient";
 import { loadStoredServers, saveStoredServers } from "../services/serverStorage";
 import { testSSHConnection } from "../services/sshClient";
 import type { ContainerActionRequest, ContainerSummaryResponse, DockerStatusResponse } from "../types/api";
@@ -28,6 +28,7 @@ import type {
   ManagedServer,
   ServerCreateForm,
   ServerCreateReadiness,
+  FirewallClosePortRequest,
   FirewallOpenPortRequest,
   ServerOsType,
   ServerRegistrationForm
@@ -38,6 +39,8 @@ type DeleteTarget = {
   container: ContainerSummary;
   deleteData: boolean;
   confirmation: string;
+  firewallMode: "keep" | "deleteAllow" | "deny";
+  firewallPassword: string;
 };
 
 const AGENT_PORT = 18080;
@@ -48,8 +51,8 @@ export function ServerManagementPage() {
   const [noticeKind, setNoticeKind] = useState<NoticeKind>("info");
   const [dockerStatus, setDockerStatus] = useState<DockerStatusResponse>();
   const [containers, setContainers] = useState<ContainerSummary[]>([]);
-  const [managedServers, setManagedServers] = useState<ManagedServer[]>(initialManagedServers);
-  const [activeServerId, setActiveServerId] = useState("local");
+  const [managedServers, setManagedServers] = useState<ManagedServer[]>([]);
+  const [activeServerId, setActiveServerId] = useState("");
   const [isStorageReady, setIsStorageReady] = useState(false);
   const [createForm, setCreateForm] = useState<ServerCreateForm>({
     targetType: "local",
@@ -85,6 +88,8 @@ export function ServerManagementPage() {
   const [pendingFirewallOpen, setPendingFirewallOpen] = useState(false);
   const [agentUpdateModalOpen, setAgentUpdateModalOpen] = useState(false);
   const [agentUpdatePassword, setAgentUpdatePassword] = useState("");
+  const [serverRegistrationOpen, setServerRegistrationOpen] = useState(false);
+  const [gameCreateOpen, setGameCreateOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [dockerGuide, setDockerGuide] = useState<{ issue: DockerIssue; osType: ServerOsType }>();
   const activeServer = managedServers.find((server) => server.id === activeServerId) ?? managedServers[0];
@@ -129,6 +134,10 @@ export function ServerManagementPage() {
           setActiveServerId(storedServers[0].id);
           syncRegistrationFormFromServer(storedServers[0]);
           setMessage(`저장된 서버 ${storedServers.length}개를 불러왔습니다.`);
+        } else {
+          setManagedServers([]);
+          setActiveServerId("");
+          setMessage("등록된 서버가 없습니다. 서버를 먼저 추가하세요.");
         }
       } catch (error) {
         if (!ignore) {
@@ -233,6 +242,7 @@ export function ServerManagementPage() {
       updateServerAfterContainerCreate(activeServer.id);
       setPendingCreate(false);
       setCreateConfirmModalOpen(false);
+      setGameCreateOpen(false);
       setCreateSudoPassword("");
       setNoticeKind("success");
       setMessage(`${container.name} Docker 컨테이너 생성 완료`);
@@ -289,7 +299,7 @@ export function ServerManagementPage() {
         return;
       }
 
-      setDeleteTarget({ container, deleteData: false, confirmation: "" });
+      setDeleteTarget({ container, deleteData: false, confirmation: "", firewallMode: "keep", firewallPassword: "" });
       return;
     }
 
@@ -316,6 +326,22 @@ export function ServerManagementPage() {
     }
 
     try {
+      if (deleteTarget.firewallMode !== "keep") {
+        const firewallRequest = buildCloseFirewallRequest(
+          activeServer,
+          deleteTarget.container.port,
+          deleteTarget.firewallPassword,
+          deleteTarget.firewallMode
+        );
+        if (!firewallRequest) {
+          setNoticeKind("error");
+          setMessage("방화벽 규칙을 정리하려면 선택된 서버의 SSH 정보와 sudo 비밀번호가 필요합니다.");
+          return;
+        }
+
+        await closeRemoteFirewallPort(firewallRequest);
+      }
+
       await applyContainerAction({
         containerId: deleteTarget.container.id,
         action: "delete",
@@ -421,6 +447,7 @@ export function ServerManagementPage() {
     setActiveServerId(nextServer.id);
     setContainers([]);
     setDockerStatus(undefined);
+    setServerRegistrationOpen(false);
     setNoticeKind("success");
     setMessage(`${nextServer.name} 등록 완료. Agent 확인을 눌러 연결 상태를 확인하세요.`);
   }
@@ -706,6 +733,30 @@ export function ServerManagementPage() {
       sudoPassword: password,
       protocol: "tcp",
       firewallPort
+    };
+  }
+
+  function buildCloseFirewallRequest(
+    server: ManagedServer | undefined,
+    firewallPort: number,
+    sudoPassword: string,
+    closeMode: FirewallClosePortRequest["closeMode"]
+  ): FirewallClosePortRequest | undefined {
+    if (!server || server.targetType === "local" || !server.sshHost || !server.sshUser || !sudoPassword || !firewallPort) {
+      return undefined;
+    }
+
+    return {
+      host: server.sshHost,
+      port: server.sshPort ?? registrationForm.sshPort,
+      username: server.sshUser,
+      authMethod: "password",
+      password: sudoPassword,
+      expectedOs: server.osType,
+      sudoPassword,
+      protocol: "tcp",
+      firewallPort,
+      closeMode
     };
   }
 
@@ -1047,50 +1098,101 @@ export function ServerManagementPage() {
     <>
       <ToastViewport messages={toasts} onDismiss={dismissToast} />
       <Topbar
-        actionLabel="Agent 상태 확인"
-        secondaryActionLabel="컨테이너 새로고침"
-        description="로컬, 기존 원격 서버, 클라우드 서버를 등록하고 Minecraft 컨테이너를 관리합니다."
-        onAction={handleCheckAgent}
-        onSecondaryAction={refreshContainers}
-        title="서버 관리"
+        actionLabel="서버 추가"
+        secondaryActionLabel={activeServer ? "컨테이너 새로고침" : undefined}
+        description="먼저 서버를 선택하고, 선택한 서버 안에서 Agent와 Docker 게임 서버를 관리합니다."
+        onAction={() => setServerRegistrationOpen(true)}
+        onSecondaryAction={activeServer ? refreshContainers : undefined}
+        title="서버 선택"
       />
 
-      <article className="contextPanel">
-        <span>선택된 서버</span>
-        <strong>{activeServer?.name ?? "-"}</strong>
-        <code>{activeServer?.agentBaseUrl ?? "-"}</code>
-      </article>
-
-      <section className="panelGrid">
-        <AgentStatusPanel message={message} status={dockerStatus} />
-        <article className="panel">
-          <div className="panelHeader">
-            <h2>다음 작업</h2>
-          </div>
-          <ul className="statusList">
-            <li>Agent 상태 확인</li>
-            <li>Docker mode 확인</li>
-            <li>Minecraft 템플릿 선택</li>
-            <li>컨테이너 생성 후 콘솔 확인</li>
-          </ul>
+      {managedServers.length === 0 ? (
+        <article className="panel emptyStatePanel">
+          <h2>등록된 서버가 없습니다.</h2>
+          <p>처음 실행했다면 서버를 먼저 추가하세요. 지금 PC, SSH 서버, 클라우드 서버 중 하나를 등록할 수 있습니다.</p>
+          <button className="primaryButton" onClick={() => setServerRegistrationOpen(true)} type="button">
+            서버 생성
+          </button>
         </article>
-      </section>
+      ) : (
+        <section className="modeGrid" aria-label="등록된 서버">
+          {managedServers.map((server) => (
+            <ServerCard
+              isSelected={server.id === activeServerId}
+              key={server.id}
+              onCheck={handleCheckServer}
+              onDelete={handleDeleteServer}
+              onSelect={handleSelectServer}
+              server={server}
+            />
+          ))}
+        </section>
+      )}
 
-      {pendingCreate ? (
-        <article className="confirmPanel">
-          <h2>게임 포트와 Docker 생성 확인</h2>
-          <p>다시 `서버 생성`을 누르면 게임 포트를 열고 Agent가 Docker CLI로 Minecraft 컨테이너를 생성합니다.</p>
-        </article>
+      {activeServer ? (
+        <>
+          <article className="contextPanel">
+            <span>선택된 서버</span>
+            <strong>{activeServer.name}</strong>
+            <code>{activeServer.agentBaseUrl}</code>
+          </article>
+
+          <section className="panelGrid">
+            <AgentStatusPanel message={message} status={dockerStatus} />
+            <article className="panel">
+              <div className="panelHeader">
+                <h2>서버 준비</h2>
+              </div>
+              <div className="formActions">
+                <button className="secondaryButton fullWidthButton" onClick={handleCheckAgent} type="button">
+                  Agent 상태 확인
+                </button>
+                {activeServer.targetType !== "local" ? (
+                  <>
+                    <button className="secondaryButton fullWidthButton" onClick={handleTestSSHInput} type="button">
+                      SSH 확인
+                    </button>
+                    <button className="primaryButton fullWidthButton" onClick={() => handlePrepareAgent()} type="button">
+                      Agent 설치
+                    </button>
+                    <button className="secondaryButton fullWidthButton" onClick={handleRequestAgentUpdate} type="button">
+                      Agent 업데이트
+                    </button>
+                    <button
+                      className={pendingFirewallOpen ? "secondaryButton fullWidthButton warningButton" : "secondaryButton fullWidthButton"}
+                      onClick={handleOpenFirewallPort}
+                      type="button"
+                    >
+                      {pendingFirewallOpen ? "sudo 허용 후 Agent 포트 열기" : "Agent 포트 개방"}
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            </article>
+          </section>
+
+          <ServerCreateReadinessPanel readiness={createReadiness} />
+
+          <ContainerTable
+            containers={containers}
+            onAction={handleContainerAction}
+            onAddContainer={() => setGameCreateOpen(true)}
+            onRequestAction={handleRequestContainerAction}
+            pendingAction={pendingAction}
+          />
+        </>
       ) : null}
 
-      <ServerCreateReadinessPanel readiness={createReadiness} />
-
-      <ServerCreatePanel
-        disabled={!createReadiness.canCreate}
-        form={createForm}
-        onChange={setCreateForm}
-        onSubmit={handleCreateServer}
-      />
+      {gameCreateOpen ? (
+        <AppModal onClose={() => setGameCreateOpen(false)} title="게임 서버 추가">
+          <ServerCreatePanel
+            disabled={!createReadiness.canCreate}
+            form={createForm}
+            onChange={setCreateForm}
+            onSubmit={handleCreateServer}
+          />
+        </AppModal>
+      ) : null}
 
       {createConfirmModalOpen ? (
         <AppModal onClose={() => setCreateConfirmModalOpen(false)} title="게임 서버 생성">
@@ -1145,16 +1247,20 @@ export function ServerManagementPage() {
         </article>
       ) : null}
 
-      <ServerRegistrationPanel
-        form={registrationForm}
-        isFirewallConfirming={pendingFirewallOpen}
-        onChange={handleRegistrationFormChange}
-        onOpenFirewallPort={handleOpenFirewallPort}
-        onPrepareAgent={handlePrepareAgent}
-        onUpdateAgent={handleRequestAgentUpdate}
-        onSubmit={handleRegisterServer}
-        onTestSSH={handleTestSSHInput}
-      />
+      {serverRegistrationOpen ? (
+        <AppModal onClose={() => setServerRegistrationOpen(false)} title="서버 추가">
+          <ServerRegistrationPanel
+            form={registrationForm}
+            isFirewallConfirming={pendingFirewallOpen}
+            onChange={handleRegistrationFormChange}
+            onOpenFirewallPort={handleOpenFirewallPort}
+            onPrepareAgent={handlePrepareAgent}
+            onUpdateAgent={handleRequestAgentUpdate}
+            onSubmit={handleRegisterServer}
+            onTestSSH={handleTestSSHInput}
+          />
+        </AppModal>
+      ) : null}
 
       {agentUpdateModalOpen ? (
         <AppModal onClose={() => setAgentUpdateModalOpen(false)} title="Agent 업데이트">
@@ -1183,19 +1289,6 @@ export function ServerManagementPage() {
       ) : null}
 
       {dockerGuide ? <DockerInstallGuide issue={dockerGuide.issue} osType={dockerGuide.osType} /> : null}
-
-      <section className="modeGrid" aria-label="등록된 서버">
-        {managedServers.map((server) => (
-          <ServerCard
-            isSelected={server.id === activeServerId}
-            key={server.id}
-            onCheck={handleCheckServer}
-            onDelete={handleDeleteServer}
-            onSelect={handleSelectServer}
-            server={server}
-          />
-        ))}
-      </section>
 
       {deleteTarget ? (
         <AppModal onClose={() => setDeleteTarget(undefined)} title="게임 서버 삭제">
@@ -1229,6 +1322,46 @@ export function ServerManagementPage() {
               />
             </div>
           ) : null}
+          {activeServer?.targetType !== "local" ? (
+            <div className="dangerChoice">
+              <strong>방화벽 포트 정리</strong>
+              <label className="checkRow">
+                <input
+                  checked={deleteTarget.firewallMode === "keep"}
+                  onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "keep", firewallPassword: "" })}
+                  type="radio"
+                />
+                방화벽은 그대로 둠
+              </label>
+              <label className="checkRow">
+                <input
+                  checked={deleteTarget.firewallMode === "deleteAllow"}
+                  onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "deleteAllow" })}
+                  type="radio"
+                />
+                열어둔 허용 규칙 삭제
+              </label>
+              <label className="checkRow">
+                <input
+                  checked={deleteTarget.firewallMode === "deny"}
+                  onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "deny" })}
+                  type="radio"
+                />
+                차단 규칙 추가
+              </label>
+              {deleteTarget.firewallMode !== "keep" ? (
+                <label className="fieldGroup">
+                  <span>SSH password</span>
+                  <input
+                    className="textInput"
+                    onChange={(event) => setDeleteTarget({ ...deleteTarget, firewallPassword: event.target.value })}
+                    type="password"
+                    value={deleteTarget.firewallPassword}
+                  />
+                </label>
+              ) : null}
+            </div>
+          ) : null}
           <div className="modalActions">
             <button className="secondaryButton" onClick={() => setDeleteTarget(undefined)} type="button">
               취소
@@ -1240,12 +1373,6 @@ export function ServerManagementPage() {
         </AppModal>
       ) : null}
 
-      <ContainerTable
-        containers={containers}
-        onAction={handleContainerAction}
-        onRequestAction={handleRequestContainerAction}
-        pendingAction={pendingAction}
-      />
     </>
   );
 }

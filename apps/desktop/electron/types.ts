@@ -21,6 +21,10 @@ export interface FirewallOpenPortRequest extends SshRequest {
   sudoPassword: string;
 }
 
+export interface FirewallClosePortRequest extends FirewallOpenPortRequest {
+  closeMode: "deleteAllow" | "deny";
+}
+
 export interface FirewallOpenPortResult {
   opened: boolean;
   method: string;

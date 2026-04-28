@@ -4,12 +4,14 @@ import type { ContainerSummary } from "../types/server";
 interface ContainerTableProps {
   containers: ContainerSummary[];
   pendingAction?: ContainerActionRequest;
+  onAddContainer?: () => void;
   onAction: (containerId: string, action: ContainerActionRequest["action"]) => void;
   onRequestAction: (containerId: string, action: ContainerActionRequest["action"]) => void;
 }
 
 export function ContainerTable({
   containers,
+  onAddContainer,
   onAction,
   onRequestAction,
   pendingAction
@@ -22,6 +24,11 @@ export function ContainerTable({
     <article className="panel widePanel">
       <div className="panelHeader">
         <h2>Docker 컨테이너</h2>
+        {onAddContainer ? (
+          <button className="primaryButton compactButton" onClick={onAddContainer} type="button">
+            게임 서버 추가
+          </button>
+        ) : null}
       </div>
       <table className="dataTable">
         <thead>
@@ -30,14 +37,14 @@ export function ContainerTable({
             <th>이미지</th>
             <th>상태</th>
             <th>포트</th>
-            <th>인스턴스</th>
+            <th>데이터 위치</th>
             <th>작업</th>
           </tr>
         </thead>
         <tbody>
           {containers.length === 0 ? (
             <tr>
-              <td colSpan={6}>생성된 컨테이너가 없습니다.</td>
+              <td colSpan={6}>생성된 게임 서버가 없습니다.</td>
             </tr>
           ) : (
             containers.map((container) => (
@@ -46,7 +53,7 @@ export function ContainerTable({
                 <td>{container.image || "-"}</td>
                 <td>{container.status}</td>
                 <td>{container.port || "-"}</td>
-                <td>{container.instanceId || "-"}</td>
+                <td>{container.volumePath || "-"}</td>
                 <td>
                   <div className="tableActions">
                     <button

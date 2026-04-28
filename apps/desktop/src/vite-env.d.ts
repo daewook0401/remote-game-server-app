@@ -8,5 +8,6 @@ interface Window {
     testSSH?: (request: unknown) => Promise<unknown>;
     prepareAgent?: (request: unknown) => Promise<unknown>;
     openFirewallPort?: (request: unknown) => Promise<unknown>;
+    closeFirewallPort?: (request: unknown) => Promise<unknown>;
   };
 }

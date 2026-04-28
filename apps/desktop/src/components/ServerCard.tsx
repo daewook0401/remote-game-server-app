@@ -31,10 +31,6 @@ export function ServerCard({ isSelected, onCheck, onDelete, onSelect, server }: 
           <dd>{server.agentBaseUrl}</dd>
         </div>
         <div>
-          <dt>SSH key</dt>
-          <dd>{server.sshKeyPath || "-"}</dd>
-        </div>
-        <div>
           <dt>OS</dt>
           <dd>{server.osType}</dd>
         </div>
@@ -46,17 +42,13 @@ export function ServerCard({ isSelected, onCheck, onDelete, onSelect, server }: 
           <dt>Docker</dt>
           <dd>{server.dockerStatus}</dd>
         </div>
-        <div>
-          <dt>준비 상태</dt>
-          <dd>{server.lastAgentPrepareMessage ?? server.lastAgentPrepareStatus ?? "-"}</dd>
-        </div>
       </dl>
       <div className="cardActions">
-        <button className="secondaryButton compactButton" onClick={() => onSelect(server.id)} type="button">
-          선택
+        <button className="primaryButton compactButton" onClick={() => onSelect(server.id)} type="button">
+          들어가기
         </button>
-        <button className="primaryButton compactButton" onClick={() => onCheck(server.id)} type="button">
-          Agent 확인
+        <button className="secondaryButton compactButton" onClick={() => onCheck(server.id)} type="button">
+          상태 확인
         </button>
         <button className="smallButton danger" onClick={() => onDelete(server.id)} type="button">
           삭제
