@@ -16,7 +16,10 @@ function createWindow() {
     title: "Remote Game Server",
     backgroundColor: "#0f172a",
     webPreferences: {
-      preload: path.join(__dirname, "preload.js")
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "preload.js"),
+      sandbox: false
     }
   });
 
