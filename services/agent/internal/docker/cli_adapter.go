@@ -58,6 +58,12 @@ func (adapter *CLIAdapter) CreateMinecraftServer(request CreateMinecraftServerRe
 		return ContainerSummary{}, errors.New("minecraft eula must be accepted")
 	}
 
+	if request.VolumePath != "" {
+		if err := ensureManagedVolumePath(request.VolumePath); err != nil {
+			return ContainerSummary{}, err
+		}
+	}
+
 	args := BuildMinecraftRunArgs(request)
 	output, err := exec.Command(adapter.dockerPath, args...).CombinedOutput()
 	if err != nil {
@@ -282,6 +288,19 @@ func removeManagedVolumePath(volumePath string) error {
 	}
 
 	return os.RemoveAll(cleanPath)
+}
+
+func ensureManagedVolumePath(volumePath string) error {
+	cleanPath := filepath.Clean(volumePath)
+	if !isSafeManagedVolumePath(cleanPath) {
+		return errors.New("refusing to create unmanaged volume path")
+	}
+
+	if err := os.MkdirAll(cleanPath, 0o777); err != nil {
+		return err
+	}
+
+	return os.Chmod(cleanPath, 0o777)
 }
 
 func isSafeManagedVolumePath(volumePath string) bool {

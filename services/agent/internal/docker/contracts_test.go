@@ -120,6 +120,12 @@ func TestManagedVolumePathSafety(t *testing.T) {
 	}
 }
 
+func TestManagedVolumePathRejectsRelativePath(t *testing.T) {
+	if isSafeManagedVolumePath("remote-game-server/volume/minecraft/minecraft-survival") {
+		t.Fatal("expected relative path to be rejected")
+	}
+}
+
 func TestBuildContainerActionArgs(t *testing.T) {
 	args, err := BuildContainerActionArgs(ContainerActionRequest{
 		ContainerID: "mc-01",
