@@ -74,6 +74,9 @@ export interface SshTestResult {
   detectedOs: string;
   expectedOs: ServerOsType;
   osMatches: boolean;
+  dockerInstalled: boolean;
+  dockerReady: boolean;
+  agentPortOpen: boolean;
   output: string;
 }
 

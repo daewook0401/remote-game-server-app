@@ -108,6 +108,9 @@ Renderer UI
 -> ssh2 라이브러리로 password 또는 key 인증 접속
 -> OS 감지 명령 실행
 -> 선택한 OS와 감지한 OS 비교
+-> Docker 설치/실행 가능 여부 확인
+-> Agent 포트 18080 listen 여부 확인
+-> Desktop에서 Agent URL API 접근 가능 여부 확인
 -> Renderer UI에 결과 표시
 ```
 
@@ -119,8 +122,26 @@ OS 감지 기준:
 
 SSH password는 접속 테스트에만 사용하고 저장하지 않는다. SSH key path는 서버 등록 정보에 저장할 수 있다.
 
+## Docker와 Agent 확인 기준
+
+SSH 접속이 성공하면 Electron main process는 원격 서버에서 다음 상태를 함께 확인한다.
+
+- Docker CLI 설치 여부: `docker --version`
+- Docker daemon 접근 가능 여부: `docker info`
+- Agent 포트 listen 여부: `18080` 포트 확인
+
+이후 Renderer는 등록된 Agent URL로 `/docker/status`를 호출해 현재 PC에서 Agent API에 접근 가능한지도 확인한다.
+
+판단 예시:
+
+```text
+SSH 접속 성공 · OS 일치(linux-ubuntu) · Docker 준비됨 · Agent 포트 열림 · Agent API 접근 가능
+```
+
+Agent 포트가 열려 있어도 방화벽, 보안 그룹, NAT, 바인딩 주소 때문에 Desktop에서 Agent API 접근이 실패할 수 있다. 그래서 서버 내부 포트 확인과 Desktop에서의 Agent URL 접근 확인을 분리한다.
+
 ## 다음 구현 후보
 
-- SSH 연결 테스트 결과에 Docker/Agent 설치 여부 확인을 추가한다.
+- SSH 연결 테스트 결과를 바탕으로 Agent 설치/실행 명령 안내를 추가한다.
 - 클라우드 서버 생성 버튼은 provider별 플러그인 또는 Terraform/CLI 가이드로 분리한다.
 - Agent token을 OS 보안 저장소 또는 암호화 저장소로 옮긴다.

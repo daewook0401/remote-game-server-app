@@ -43,13 +43,17 @@ ipcMain.handle("servers:save", async (_event, servers: unknown) => {
 
 ipcMain.handle("ssh:test", async (_event, request: SshTestRequest) => {
   const output = await runSshCommand(request);
-  const detectedOs = detectOperatingSystem(output);
+  const osOutput = extractSection(output, "OS");
+  const detectedOs = detectOperatingSystem(osOutput);
 
   return {
     connected: true,
     detectedOs,
     expectedOs: request.expectedOs,
     osMatches: doesOperatingSystemMatch(request.expectedOs, detectedOs),
+    dockerInstalled: isDockerInstalled(output),
+    dockerReady: isDockerReady(output),
+    agentPortOpen: isAgentPortOpen(output),
     output
   };
 });
@@ -101,14 +105,48 @@ async function runSshCommand(request: SshTestRequest) {
 
 function osDetectionCommand(expectedOs: ServerOsType) {
   if (expectedOs === "windows") {
-    return "powershell -NoProfile -Command \"$PSVersionTable.OS; [System.Environment]::OSVersion.VersionString\"";
+    return [
+      "powershell -NoProfile -Command",
+      "\"",
+      "Write-Output '__OS_START__';",
+      "$PSVersionTable.OS;",
+      "[System.Environment]::OSVersion.VersionString;",
+      "Write-Output '__OS_END__';",
+      "Write-Output '__DOCKER_START__';",
+      "if (Get-Command docker -ErrorAction SilentlyContinue) { docker --version; docker info 2>$null; if ($LASTEXITCODE -eq 0) { Write-Output 'DOCKER_READY=true' } else { Write-Output 'DOCKER_READY=false' } } else { Write-Output 'DOCKER_INSTALLED=false'; Write-Output 'DOCKER_READY=false' };",
+      "Write-Output '__DOCKER_END__';",
+      "Write-Output '__AGENT_START__';",
+      "if ((Test-NetConnection 127.0.0.1 -Port 18080 -InformationLevel Quiet)) { Write-Output 'AGENT_PORT_OPEN=true' } else { Write-Output 'AGENT_PORT_OPEN=false' };",
+      "Write-Output '__AGENT_END__'",
+      "\""
+    ].join(" ");
   }
 
   if (expectedOs === "macos") {
-    return "sw_vers -productName; sw_vers -productVersion; uname -a";
+    return [
+      "printf '__OS_START__\\n';",
+      "sw_vers -productName 2>/dev/null; sw_vers -productVersion 2>/dev/null; uname -a;",
+      "printf '\\n__OS_END__\\n';",
+      "printf '__DOCKER_START__\\n';",
+      "if command -v docker >/dev/null 2>&1; then docker --version; docker info >/dev/null 2>&1 && printf 'DOCKER_READY=true\\n' || printf 'DOCKER_READY=false\\n'; else printf 'DOCKER_INSTALLED=false\\nDOCKER_READY=false\\n'; fi;",
+      "printf '__DOCKER_END__\\n';",
+      "printf '__AGENT_START__\\n';",
+      "if lsof -iTCP:18080 -sTCP:LISTEN >/dev/null 2>&1; then printf 'AGENT_PORT_OPEN=true\\n'; else printf 'AGENT_PORT_OPEN=false\\n'; fi;",
+      "printf '__AGENT_END__\\n'"
+    ].join(" ");
   }
 
-  return "cat /etc/os-release 2>/dev/null || uname -a";
+  return [
+    "printf '__OS_START__\\n';",
+    "cat /etc/os-release 2>/dev/null || uname -a;",
+    "printf '\\n__OS_END__\\n';",
+    "printf '__DOCKER_START__\\n';",
+    "if command -v docker >/dev/null 2>&1; then docker --version; docker info >/dev/null 2>&1 && printf 'DOCKER_READY=true\\n' || printf 'DOCKER_READY=false\\n'; else printf 'DOCKER_INSTALLED=false\\nDOCKER_READY=false\\n'; fi;",
+    "printf '__DOCKER_END__\\n';",
+    "printf '__AGENT_START__\\n';",
+    "if (command -v ss >/dev/null 2>&1 && ss -ltn | grep -q ':18080 ') || (command -v netstat >/dev/null 2>&1 && netstat -ltn | grep -q ':18080 ') || (command -v lsof >/dev/null 2>&1 && lsof -iTCP:18080 -sTCP:LISTEN >/dev/null 2>&1); then printf 'AGENT_PORT_OPEN=true\\n'; else printf 'AGENT_PORT_OPEN=false\\n'; fi;",
+    "printf '__AGENT_END__\\n'"
+  ].join(" ");
 }
 
 function detectOperatingSystem(output: string) {
@@ -147,6 +185,32 @@ function doesOperatingSystemMatch(expectedOs: ServerOsType, detectedOs: string) 
   }
 
   return expectedOs === detectedOs;
+}
+
+function extractSection(output: string, section: string) {
+  const start = `__${section}_START__`;
+  const end = `__${section}_END__`;
+  const startIndex = output.indexOf(start);
+  const endIndex = output.indexOf(end);
+
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    return output;
+  }
+
+  return output.slice(startIndex + start.length, endIndex).trim();
+}
+
+function isDockerInstalled(output: string) {
+  const dockerSection = extractSection(output, "DOCKER").toLowerCase();
+  return dockerSection.includes("docker version") || dockerSection.includes("docker_installed=true");
+}
+
+function isDockerReady(output: string) {
+  return extractSection(output, "DOCKER").toLowerCase().includes("docker_ready=true");
+}
+
+function isAgentPortOpen(output: string) {
+  return extractSection(output, "AGENT").toLowerCase().includes("agent_port_open=true");
 }
 
 function createWindow() {

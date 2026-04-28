@@ -332,11 +332,24 @@ export function ServerManagementPage() {
         expectedOs: registrationForm.osType
       });
 
-      setNoticeKind(result.osMatches ? "success" : "warning");
+      let agentApiReachable = false;
+      try {
+        await getDockerStatus(registrationForm.agentBaseUrl, registrationForm.agentToken || undefined);
+        agentApiReachable = true;
+      } catch {
+        agentApiReachable = false;
+      }
+
+      const isReady = result.osMatches && result.dockerInstalled && result.dockerReady && result.agentPortOpen && agentApiReachable;
+      setNoticeKind(isReady ? "success" : "warning");
       setMessage(
-        result.osMatches
-          ? `SSH 접속 성공. 설정한 운영체제와 일치합니다: ${result.detectedOs}`
-          : `SSH 접속은 성공했지만 운영체제가 다릅니다. 설정: ${result.expectedOs}, 감지: ${result.detectedOs}`
+        [
+          `SSH 접속 성공`,
+          `OS ${result.osMatches ? "일치" : "불일치"}(${result.detectedOs})`,
+          `Docker ${result.dockerReady ? "준비됨" : result.dockerInstalled ? "설치됨/미실행" : "미설치"}`,
+          `Agent 포트 ${result.agentPortOpen ? "열림" : "닫힘"}`,
+          `Agent API ${agentApiReachable ? "접근 가능" : "접근 불가"}`
+        ].join(" · ")
       );
     } catch (error) {
       setNoticeKind("error");
