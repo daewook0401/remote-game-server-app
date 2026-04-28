@@ -552,3 +552,21 @@ button {
   border-radius: 6px;
   background: #f1f5f9;
 }
+
+.guidePanel {
+  border-color: #fde68a;
+}
+
+.commandList {
+  display: grid;
+  gap: 8px;
+}
+
+.commandList code {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #dbeafe;
+  background: #111827;
+  overflow-wrap: anywhere;
+}

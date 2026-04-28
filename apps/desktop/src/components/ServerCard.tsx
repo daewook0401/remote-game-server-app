@@ -45,6 +45,10 @@ export function ServerCard({ isSelected, onCheck, onSelect, server }: ServerCard
           <dt>Docker</dt>
           <dd>{server.dockerStatus}</dd>
         </div>
+        <div>
+          <dt>준비 상태</dt>
+          <dd>{server.lastAgentPrepareMessage ?? server.lastAgentPrepareStatus ?? "-"}</dd>
+        </div>
       </dl>
       <div className="cardActions">
         <button className="secondaryButton compactButton" onClick={() => onSelect(server.id)} type="button">

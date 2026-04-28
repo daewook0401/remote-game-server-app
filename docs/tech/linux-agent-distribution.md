@@ -20,6 +20,8 @@ dist/agent-linux-amd64
 
 GitHub Release에 업로드할 기본 파일명은 `agent-linux-amd64`로 둔다.
 
+현재 단계에서는 자동 업로드를 수행하지 않는다. Release 업로드는 사용자가 별도로 승인한 뒤 진행한다.
+
 ### Docker 이미지
 
 ```powershell

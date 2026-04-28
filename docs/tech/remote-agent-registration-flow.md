@@ -154,6 +154,16 @@ Linux 서버에서는 `Agent 준비` 버튼으로 다음 작업을 수행한다.
 
 자세한 배포 기준은 [Linux Agent 배포 흐름](./linux-agent-distribution.md)을 따른다.
 
+## 서버 카드 반영
+
+SSH 확인 또는 Agent 준비 결과는 서버 카드의 상태에 반영한다.
+
+- Agent 준비 성공: `connected`, `ready`
+- Agent API 접근 불가: Agent 상태 `offline`
+- Docker 미설치: Docker 상태 `needsSetup`
+
+Docker가 설치되지 않은 서버는 등록 화면 아래에 OS별 Docker 설치 안내를 표시한다.
+
 ## 다음 구현 후보
 
 - SSH 연결 테스트 결과를 바탕으로 Agent 설치/실행 명령 안내를 추가한다.

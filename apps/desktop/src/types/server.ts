@@ -19,6 +19,8 @@ export interface ManagedServer {
   sshKeyPath?: string;
   sshAuthMethod?: SshAuthMethod;
   agentToken?: string;
+  lastAgentPrepareStatus?: "ready" | "needsDocker" | "agentApiBlocked" | "failed";
+  lastAgentPrepareMessage?: string;
   status: ServerStatus;
   agentStatus: "connected" | "notInstalled" | "offline";
   dockerStatus: "ready" | "needsSetup" | "unknown";

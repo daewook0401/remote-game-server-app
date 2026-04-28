@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AgentStatusPanel } from "../components/AgentStatusPanel";
 import { ContainerTable } from "../components/ContainerTable";
+import { DockerInstallGuide } from "../components/DockerInstallGuide";
 import { ServerCreatePanel } from "../components/ServerCreatePanel";
 import { ServerCard } from "../components/ServerCard";
 import { ServerRegistrationPanel } from "../components/ServerRegistrationPanel";
@@ -16,7 +17,7 @@ import { prepareRemoteAgent } from "../services/agentBootstrapClient";
 import { loadStoredServers, saveStoredServers } from "../services/serverStorage";
 import { testSSHConnection } from "../services/sshClient";
 import type { ContainerActionRequest, ContainerSummaryResponse, DockerStatusResponse } from "../types/api";
-import type { ContainerSummary, ManagedServer, ServerCreateForm, ServerRegistrationForm } from "../types/server";
+import type { ContainerSummary, ManagedServer, ServerCreateForm, ServerOsType, ServerRegistrationForm } from "../types/server";
 
 type NoticeKind = "info" | "success" | "warning" | "error";
 
@@ -56,6 +57,7 @@ export function ServerManagementPage() {
   });
   const [pendingCreate, setPendingCreate] = useState(false);
   const [pendingAction, setPendingAction] = useState<ContainerActionRequest>();
+  const [dockerGuideOs, setDockerGuideOs] = useState<ServerOsType>();
   const activeServer = managedServers.find((server) => server.id === activeServerId) ?? managedServers[0];
   const activeAgentBaseUrl = activeServer?.agentBaseUrl;
   const activeAgentToken = activeServer?.agentToken;
@@ -343,6 +345,10 @@ export function ServerManagementPage() {
       }
 
       const isReady = result.osMatches && result.dockerInstalled && result.dockerReady && result.agentPortOpen && agentApiReachable;
+      setDockerGuideOs(result.dockerInstalled ? undefined : registrationForm.osType);
+      if (!result.dockerInstalled) {
+        upsertDiagnosticServer("needsDocker", "Docker 설치 필요");
+      }
       setNoticeKind(isReady ? "success" : "warning");
       setMessage(
         [
@@ -420,19 +426,120 @@ export function ServerManagementPage() {
       }
 
       const ready = result.installed && result.started && result.agentPortOpen && agentApiReachable;
+      const preparedServer = upsertPreparedServer(ready, agentApiReachable);
       setNoticeKind(ready ? "success" : "warning");
       setMessage(
         [
           `Agent ${result.installed ? "설치됨" : "설치 실패"}`,
           `실행 ${result.started ? "성공" : "확인 실패"}`,
           `포트 ${result.agentPortOpen ? "열림" : "닫힘"}`,
-          `API ${agentApiReachable ? "접근 가능" : "접근 불가"}`
+          `API ${agentApiReachable ? "접근 가능" : "접근 불가"}`,
+          `카드 ${preparedServer ? "반영됨" : "미반영"}`
         ].join(" · ")
       );
     } catch (error) {
       setNoticeKind("error");
       setMessage(error instanceof Error ? error.message : "Agent 준비 실패");
     }
+  }
+
+  function buildServerFromRegistration(status: ManagedServer["lastAgentPrepareStatus"], message: string): ManagedServer {
+    return {
+      id: `${registrationForm.targetType}-${Date.now()}`,
+      name: registrationForm.name,
+      targetType: registrationForm.targetType,
+      osType: registrationForm.osType,
+      host:
+        registrationForm.targetType === "local"
+          ? "localhost"
+          : `${registrationForm.sshUser}@${registrationForm.sshHost}:${registrationForm.sshPort}`,
+      agentBaseUrl: registrationForm.agentBaseUrl,
+      sshHost: registrationForm.sshHost || undefined,
+      sshPort: registrationForm.targetType === "local" ? undefined : registrationForm.sshPort,
+      sshUser: registrationForm.sshUser || undefined,
+      sshAuthMethod: registrationForm.targetType === "local" ? undefined : registrationForm.sshAuthMethod,
+      sshKeyPath: registrationForm.sshKeyPath || undefined,
+      agentToken: registrationForm.agentToken || undefined,
+      lastAgentPrepareStatus: status,
+      lastAgentPrepareMessage: message,
+      status: status === "ready" ? "connected" : "setupRequired",
+      agentStatus: status === "ready" ? "connected" : status === "agentApiBlocked" ? "offline" : "notInstalled",
+      dockerStatus: status === "needsDocker" ? "needsSetup" : "ready"
+    };
+  }
+
+  function upsertDiagnosticServer(status: ManagedServer["lastAgentPrepareStatus"], message: string) {
+    let targetId = "";
+    setManagedServers((current) => {
+      const existing = current.find(
+        (server) =>
+          server.agentBaseUrl === registrationForm.agentBaseUrl ||
+          (server.sshHost && server.sshHost === registrationForm.sshHost)
+      );
+
+      if (!existing) {
+        const nextServer = buildServerFromRegistration(status, message);
+        targetId = nextServer.id;
+        return [...current, nextServer];
+      }
+
+      targetId = existing.id;
+      return current.map((server) =>
+        server.id === existing.id
+          ? {
+              ...server,
+              lastAgentPrepareStatus: status,
+              lastAgentPrepareMessage: message,
+              status: "setupRequired",
+              dockerStatus: status === "needsDocker" ? "needsSetup" : server.dockerStatus
+            }
+          : server
+      );
+    });
+
+    if (targetId) {
+      setActiveServerId(targetId);
+    }
+  }
+
+  function upsertPreparedServer(ready: boolean, agentApiReachable: boolean) {
+    const status: ManagedServer["lastAgentPrepareStatus"] = ready ? "ready" : agentApiReachable ? "failed" : "agentApiBlocked";
+    const message = ready ? "Agent 준비 완료" : agentApiReachable ? "Agent 준비 확인 필요" : "Agent API 접근 불가";
+    let targetId = "";
+
+    setManagedServers((current) => {
+      const existing = current.find(
+        (server) =>
+          server.agentBaseUrl === registrationForm.agentBaseUrl ||
+          (server.sshHost && server.sshHost === registrationForm.sshHost)
+      );
+
+      if (!existing) {
+        const nextServer = buildServerFromRegistration(status, message);
+        targetId = nextServer.id;
+        return [...current, nextServer];
+      }
+
+      targetId = existing.id;
+      return current.map((server) =>
+        server.id === existing.id
+          ? {
+              ...server,
+              lastAgentPrepareStatus: status,
+              lastAgentPrepareMessage: message,
+              status: ready ? "connected" : "setupRequired",
+              agentStatus: ready ? "connected" : agentApiReachable ? "notInstalled" : "offline",
+              dockerStatus: ready ? "ready" : server.dockerStatus
+            }
+          : server
+      );
+    });
+
+    if (targetId) {
+      setActiveServerId(targetId);
+    }
+
+    return true;
   }
 
   async function handleCheckServer(serverId: string) {
@@ -560,6 +667,8 @@ export function ServerManagementPage() {
         onSubmit={handleRegisterServer}
         onTestSSH={handleTestSSHInput}
       />
+
+      {dockerGuideOs ? <DockerInstallGuide osType={dockerGuideOs} /> : null}
 
       <section className="modeGrid" aria-label="등록된 서버">
         {managedServers.map((server) => (
