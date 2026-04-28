@@ -1,0 +1,145 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/daewook0401/remote-game-server-app/services/agent/internal/docker"
+)
+
+func TestCreateMinecraftServer(t *testing.T) {
+	server := NewServer(docker.NewMemoryService())
+	payload := docker.CreateMinecraftServerRequest{
+		ServerID:       "local",
+		TargetType:     "local",
+		GameTemplateID: "minecraft-java",
+		InstanceID:     "instance-1",
+		ContainerName:  "minecraft-survival",
+		Image:          "itzg/minecraft-server",
+		InternalPort:   25565,
+		ExternalPort:   25565,
+		Memory:         "2G",
+		EulaAccepted:   true,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/docker/minecraft", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var container docker.ContainerSummary
+	if err := json.NewDecoder(response.Body).Decode(&container); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if container.Port != 25565 || container.Status != "running" || container.InstanceID != "instance-1" {
+		t.Fatalf("unexpected container response: %+v", container)
+	}
+}
+
+func TestListManagedContainers(t *testing.T) {
+	server := NewServer(docker.NewMemoryService())
+	payload := docker.CreateMinecraftServerRequest{
+		ServerID:       "local",
+		TargetType:     "local",
+		GameTemplateID: "minecraft-java",
+		InstanceID:     "instance-1",
+		ContainerName:  "minecraft-survival",
+		Image:          "itzg/minecraft-server",
+		InternalPort:   25565,
+		ExternalPort:   25565,
+		Memory:         "2G",
+		EulaAccepted:   true,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+
+	createRequest := httptest.NewRequest(http.MethodPost, "/docker/minecraft", bytes.NewReader(body))
+	createResponse := httptest.NewRecorder()
+	server.Routes().ServeHTTP(createResponse, createRequest)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", createResponse.Code, createResponse.Body.String())
+	}
+
+	listRequest := httptest.NewRequest(http.MethodGet, "/docker/containers", nil)
+	listResponse := httptest.NewRecorder()
+	server.Routes().ServeHTTP(listResponse, listRequest)
+	if listResponse.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", listResponse.Code, listResponse.Body.String())
+	}
+
+	var containers []docker.ContainerSummary
+	if err := json.NewDecoder(listResponse.Body).Decode(&containers); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(containers) != 1 || containers[0].InstanceID != "instance-1" {
+		t.Fatalf("unexpected containers response: %+v", containers)
+	}
+}
+
+func TestCreateMinecraftServerRejectsMissingEula(t *testing.T) {
+	server := NewServer(docker.NewMemoryService())
+	payload := docker.CreateMinecraftServerRequest{
+		ServerID:       "local",
+		TargetType:     "local",
+		GameTemplateID: "minecraft-java",
+		InstanceID:     "instance-1",
+		ContainerName:  "minecraft-survival",
+		Image:          "itzg/minecraft-server",
+		InternalPort:   25565,
+		ExternalPort:   25565,
+		Memory:         "2G",
+		EulaAccepted:   false,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/docker/minecraft", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", response.Code)
+	}
+}
+
+func TestDockerStatus(t *testing.T) {
+	server := NewServer(docker.NewMemoryService())
+	request := httptest.NewRequest(http.MethodGet, "/docker/status", nil)
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", response.Code)
+	}
+
+	var status docker.DockerStatus
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if !status.Available || status.Mode != "memory" {
+		t.Fatalf("unexpected docker status: %+v", status)
+	}
+}
