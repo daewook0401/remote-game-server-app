@@ -5,5 +5,6 @@ interface Window {
     appName: string;
     loadServers?: () => Promise<unknown>;
     saveServers?: (servers: unknown) => Promise<boolean>;
+    testSSH?: (request: unknown) => Promise<unknown>;
   };
 }

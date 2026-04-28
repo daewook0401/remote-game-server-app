@@ -13,11 +13,19 @@ function isManagedServerList(value: unknown): value is ManagedServer[] {
   });
 }
 
+function normalizeServer(server: ManagedServer): ManagedServer {
+  return {
+    ...server,
+    osType: server.osType ?? "linux-ubuntu",
+    sshAuthMethod: server.sshAuthMethod ?? (server.sshKeyPath ? "key" : "password")
+  };
+}
+
 export async function loadStoredServers(): Promise<ManagedServer[] | null> {
   const electronApi = window.remoteGameServer;
   if (electronApi?.loadServers) {
     const stored = await electronApi.loadServers();
-    return isManagedServerList(stored) ? stored : null;
+    return isManagedServerList(stored) ? stored.map(normalizeServer) : null;
   }
 
   const raw = window.localStorage.getItem(browserStorageKey);
@@ -26,7 +34,7 @@ export async function loadStoredServers(): Promise<ManagedServer[] | null> {
   }
 
   const stored = JSON.parse(raw) as unknown;
-  return isManagedServerList(stored) ? stored : null;
+  return isManagedServerList(stored) ? stored.map(normalizeServer) : null;
 }
 
 export async function saveStoredServers(servers: ManagedServer[]) {

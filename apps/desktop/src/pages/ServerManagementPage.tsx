@@ -13,6 +13,7 @@ import {
   listManagedContainers
 } from "../services/agentClient";
 import { loadStoredServers, saveStoredServers } from "../services/serverStorage";
+import { testSSHConnection } from "../services/sshClient";
 import type { ContainerActionRequest, ContainerSummaryResponse, DockerStatusResponse } from "../types/api";
 import type { ContainerSummary, ManagedServer, ServerCreateForm, ServerRegistrationForm } from "../types/server";
 
@@ -41,10 +42,13 @@ export function ServerManagementPage() {
   const [registrationForm, setRegistrationForm] = useState<ServerRegistrationForm>({
     name: "새 원격 서버",
     targetType: "remote",
+    osType: "linux-ubuntu",
     sshHost: "",
     sshPort: 22,
     sshUser: "",
+    sshAuthMethod: "key",
     sshKeyPath: "",
+    sshPassword: "",
     agentBaseUrl: "http://127.0.0.1:18080",
     agentToken: ""
   });
@@ -265,6 +269,7 @@ export function ServerManagementPage() {
       id: `${registrationForm.targetType}-${Date.now()}`,
       name: registrationForm.name,
       targetType: registrationForm.targetType,
+      osType: registrationForm.osType,
       host:
         registrationForm.targetType === "local"
           ? "localhost"
@@ -273,6 +278,7 @@ export function ServerManagementPage() {
       sshHost: registrationForm.sshHost || undefined,
       sshPort: registrationForm.targetType === "local" ? undefined : registrationForm.sshPort,
       sshUser: registrationForm.sshUser || undefined,
+      sshAuthMethod: registrationForm.targetType === "local" ? undefined : registrationForm.sshAuthMethod,
       sshKeyPath: registrationForm.sshKeyPath || undefined,
       agentToken: registrationForm.agentToken || undefined,
       status: "setupRequired",
@@ -288,7 +294,7 @@ export function ServerManagementPage() {
     setMessage(`${nextServer.name} 등록 완료. Agent 확인을 눌러 연결 상태를 확인하세요.`);
   }
 
-  function handleTestSSHInput() {
+  async function handleTestSSHInput() {
     if (registrationForm.targetType === "local") {
       setNoticeKind("info");
       setMessage("로컬 서버는 SSH 입력 확인이 필요하지 않습니다.");
@@ -301,8 +307,41 @@ export function ServerManagementPage() {
       return;
     }
 
-    setNoticeKind("warning");
-    setMessage("SSH 입력값은 준비됐습니다. 실제 접속 테스트는 다음 단계에서 Electron main 프로세스 IPC로 실행합니다.");
+    if (registrationForm.sshAuthMethod === "password" && !registrationForm.sshPassword) {
+      setNoticeKind("error");
+      setMessage("패스워드 인증을 선택한 경우 SSH password가 필요합니다.");
+      return;
+    }
+
+    if (registrationForm.sshAuthMethod === "key" && !registrationForm.sshKeyPath) {
+      setNoticeKind("error");
+      setMessage("키 인증을 선택한 경우 SSH key path가 필요합니다.");
+      return;
+    }
+
+    try {
+      setNoticeKind("info");
+      setMessage("SSH 접속과 운영체제 확인을 진행합니다.");
+      const result = await testSSHConnection({
+        host: registrationForm.sshHost,
+        port: registrationForm.sshPort,
+        username: registrationForm.sshUser,
+        authMethod: registrationForm.sshAuthMethod,
+        password: registrationForm.sshAuthMethod === "password" ? registrationForm.sshPassword : undefined,
+        keyPath: registrationForm.sshAuthMethod === "key" ? registrationForm.sshKeyPath : undefined,
+        expectedOs: registrationForm.osType
+      });
+
+      setNoticeKind(result.osMatches ? "success" : "warning");
+      setMessage(
+        result.osMatches
+          ? `SSH 접속 성공. 설정한 운영체제와 일치합니다: ${result.detectedOs}`
+          : `SSH 접속은 성공했지만 운영체제가 다릅니다. 설정: ${result.expectedOs}, 감지: ${result.detectedOs}`
+      );
+    } catch (error) {
+      setNoticeKind("error");
+      setMessage(error instanceof Error ? error.message : "SSH 접속 테스트 실패");
+    }
   }
 
   async function handleCheckServer(serverId: string) {
