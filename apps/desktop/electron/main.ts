@@ -13,7 +13,7 @@ function createWindow() {
     height: 760,
     minWidth: 980,
     minHeight: 640,
-    title: "Remote Game Server",
+    title: "OpenServerHub",
     backgroundColor: "#0f172a",
     webPreferences: {
       contextIsolation: true,

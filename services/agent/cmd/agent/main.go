@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/daewook0401/remote-game-server-app/services/agent/internal/api"
-	"github.com/daewook0401/remote-game-server-app/services/agent/internal/docker"
+	"github.com/daewook0401/OpenServerHub/services/agent/internal/api"
+	"github.com/daewook0401/OpenServerHub/services/agent/internal/docker"
 )
 
 func main() {

@@ -2,13 +2,13 @@
 
 ## 받은 피드백
 
-실제 시작 프로젝트의 Git 레포는 `https://github.com/daewook0401/remote-game-server-app.git`이며, 레포를 연결하고 어떤 언어로 개발할 것인지 명시해야 한다.
+실제 시작 프로젝트의 Git 레포는 `https://github.com/daewook0401/OpenServerHub.git`이며, 레포를 연결하고 어떤 언어로 개발할 것인지 명시해야 한다.
 
 ## 반영 내용
 
 - 현재 작업 폴더를 Git 저장소로 초기화했다.
 - 기본 브랜치를 `main`으로 설정했다.
-- 원격 저장소 `origin`을 `https://github.com/daewook0401/remote-game-server-app.git`로 연결했다.
+- 원격 저장소 `origin`을 `https://github.com/daewook0401/OpenServerHub.git`로 연결했다.
 - `docs/plans/task_1_impl.md`에 개발 언어 기준을 추가했다.
 
 ## 개발 언어 기준

@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/daewook0401/remote-game-server-app/services/agent/internal/docker"
+	"github.com/daewook0401/OpenServerHub/services/agent/internal/docker"
 )
 
 func TestCreateMinecraftServer(t *testing.T) {

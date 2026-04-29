@@ -15,7 +15,7 @@ export function Sidebar({ activeRoute, onNavigate }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="brandTitle">GameForge</span>
+        <span className="brandTitle">OpenServerHub</span>
         <span className="brandSub">게임 서버 관리</span>
       </div>
       <nav className="nav" aria-label="주요 메뉴">

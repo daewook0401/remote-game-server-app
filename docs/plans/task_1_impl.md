@@ -2,7 +2,7 @@
 
 ## 분석 결과
 
-현재 프로젝트는 GitHub 원격 저장소 `https://github.com/daewook0401/remote-game-server-app.git`에 연결되었다. 원격 저장소는 현재 기준으로 비어 있는 저장소처럼 보이며, 이 작업 공간의 문서를 시작점으로 프로젝트 구조를 잡는다.
+현재 프로젝트는 GitHub 원격 저장소 `https://github.com/daewook0401/OpenServerHub.git`에 연결되었다. 원격 저장소는 현재 기준으로 비어 있는 저장소처럼 보이며, 이 작업 공간의 문서를 시작점으로 프로젝트 구조를 잡는다.
 
 이번 구현계획서는 즉시 애플리케이션 소스 코드를 수정하는 계획이 아니라, 실제 구현을 시작하기 전 개발 언어, 실행 환경, 파일 책임, 검증 기준을 확정하는 문서로 작성한다.
 
@@ -21,7 +21,7 @@
 
 - 작업 경로: `C:\develop\side-project\game_saas`
 - 쉘: PowerShell
-- Git 원격 저장소: `https://github.com/daewook0401/remote-game-server-app.git`
+- Git 원격 저장소: `https://github.com/daewook0401/OpenServerHub.git`
 - Git 브랜치: `main`
 - 현재 산출물: Markdown 문서
 - 문서 작성 언어: 한국어

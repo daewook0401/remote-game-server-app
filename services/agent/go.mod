@@ -1,4 +1,3 @@
-module github.com/daewook0401/remote-game-server-app/services/agent
+module github.com/daewook0401/OpenServerHub/services/agent
 
 go 1.23
-

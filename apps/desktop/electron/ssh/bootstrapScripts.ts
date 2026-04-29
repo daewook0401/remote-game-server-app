@@ -20,7 +20,7 @@ export function agentPrepareCommand(request: AgentPrepareRequest) {
   ].join("\n");
   const serviceContent = [
     "[Unit]",
-    "Description=Remote Game Server Agent",
+    "Description=OpenServerHub Agent",
     "After=network.target docker.service",
     "",
     "[Service]",

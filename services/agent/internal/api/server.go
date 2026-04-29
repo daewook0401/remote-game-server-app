@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/daewook0401/remote-game-server-app/services/agent/internal/docker"
+	"github.com/daewook0401/OpenServerHub/services/agent/internal/docker"
 )
 
 type Server struct {

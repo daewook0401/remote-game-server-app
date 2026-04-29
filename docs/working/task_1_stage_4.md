@@ -81,7 +81,7 @@ foreach ($file in $files) {
 - `npm run desktop:build` 성공
 - `npm audit` 취약점 0건
 - `http://127.0.0.1:5173` HTTP 200 응답 확인
-- 응답 HTML에서 `Remote Game Server` 문구 확인
+- 응답 HTML에서 `OpenServerHub` 문구 확인
 - 주요 문서와 소스 파일 UTF-8 strict 검증 성공
 
 ## 실패 또는 특이사항

@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/daewook0401/remote-game-server-app/services/relay/internal/ports"
+	"github.com/daewook0401/OpenServerHub/services/relay/internal/ports"
 )
 
 func main() {

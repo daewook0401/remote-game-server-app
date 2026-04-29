@@ -55,7 +55,7 @@ export function createDefaultRegistrationForm(): ServerRegistrationForm {
     haproxyAgentProxyPort: AGENT_PORT,
     agentBaseUrl: `http://127.0.0.1:${AGENT_PORT}`,
     agentToken: "",
-    agentDownloadUrl: "https://github.com/daewook0401/remote-game-server-app/releases/latest/download/agent-linux-amd64"
+    agentDownloadUrl: "https://github.com/daewook0401/OpenServerHub/releases/latest/download/agent-linux-amd64"
   };
 }
 

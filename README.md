@@ -1,124 +1,140 @@
-# Remote Game Server App
+# OpenServerHub
 
-개인 PC, 홈서버, 클라우드 서버에서 게임 서버를 쉽게 만들고 관리하기 위한 데스크톱 프로그램입니다.  
-전문 지식이 적은 사용자도 서버를 등록하고, Agent를 설치한 뒤, Docker 기반 게임 서버를 생성하고 외부 접속 포트를 열 수 있게 만드는 것을 목표로 합니다.
+OpenServerHub is a desktop application for registering, preparing, and operating game servers across local machines, SSH-accessible Linux servers, and private network servers reached through an external relay node.
 
-## 주요 목표
+The project focuses on a practical workflow: connect to a server, install a lightweight Agent, verify Docker access, create a game server container, open the required ports, and manage the running server from one desktop UI.
 
-- 웹 UI가 아닌 설치형 데스크톱 프로그램으로 제공
-- 로컬 PC 또는 SSH 원격 서버를 등록해서 관리
-- Linux 서버에 Agent를 설치하거나 업데이트
-- Docker 컨테이너 기반 게임 서버 생성, 시작, 중지, 삭제
-- Minecraft Java 서버 생성 지원
-- 원격 서버의 Agent 포트와 게임 포트 방화벽 개방 지원
-- 서버별 볼륨 경로를 고정해 월드 데이터 유지
-- 추후 FRP 기반 Relay/Jump 서버 방식으로 NAT 내부 서버 공개 지원
+Korean documentation is available in [README_kor.md](README_kor.md).
 
-## 현재 구현된 흐름
+## What Is Implemented
 
-1. 데스크톱 앱에서 서버를 등록합니다.
-   - 내 로컬 서버
-   - SSH 원격 서버
-   - 클라우드 서버
-2. 서버 카드에서 `들어가기`를 눌러 서버 상세 화면으로 이동합니다.
-3. 상세 화면에서 Agent 상태 확인, 설치, 업데이트, Agent 포트 개방을 진행합니다.
-4. Docker 컨테이너 영역에서 게임 서버를 추가합니다.
-5. 서버 이름, 외부 포트, 메모리, EULA 동의를 입력하고 Minecraft 서버를 생성합니다.
-6. 생성된 컨테이너를 시작, 중지, 삭제하거나 콘솔 명령을 보낼 수 있습니다.
+- Electron + React desktop application
+- Server-first management UI with a server list, server detail screen, and guide screen
+- Local server and SSH Linux server registration
+- External-network relay mode using an HAProxy node to reach an internal private server
+- SSH connection checks, including direct SSH and jump/relay SSH paths
+- Linux Agent install, update, removal, and token-based API access
+- Automatic Agent API verification before a server can be registered
+- Docker CLI based server discovery and container control through the Agent
+- Minecraft Java server creation with EULA confirmation, memory setting, port setting, and persistent volume paths
+- Container start, stop, delete, console log viewing, and console command sending
+- Internal server firewall port open/close flows
+- HAProxy TCP route creation/removal for Agent and game ports
+- HAProxy install detection and guided installation on the relay node
+- Cleanup flows for deleting containers, firewall rules, HAProxy game routes, registered servers, and remote Agent data
 
-## 기술 스택
+## How It Works
 
-- Desktop: Electron, React, TypeScript, Vite
-- Agent: Go
-- Container: Docker CLI
-- Remote Access: SSH
-- Tunnel 계획: FRP
-- 문서: Markdown, Korean
+OpenServerHub has two main parts.
 
-## 프로젝트 구조
+The desktop app runs on the operator machine. It stores registered server metadata locally, performs SSH operations through Electron, and talks to the server Agent through HTTP.
 
-```text
-apps/
-  desktop/      Electron + React 데스크톱 앱
-services/
-  agent/        사용자 서버에서 실행되는 Go Agent
-  relay/        추후 Relay/Jump 서버 제어 API
-docs/
-  guides/       사용자 안내 가이드
-  working/      작업 계획 및 진행 기록
-scripts/        빌드와 배포 보조 스크립트
-```
+The Agent runs on the target server. It exposes a small API used by the desktop app to check Docker status, list managed containers, create Minecraft containers, stream console logs, send console commands, and remove containers.
 
-## 개발 실행
+For a private internal server, OpenServerHub can use an external HAProxy node. The desktop app connects to the external node by SSH, applies TCP proxy routes, opens the external firewall port, then uses the HAProxy endpoint to reach the internal Agent or game server.
 
-```bash
-npm install
-npm run desktop:dev
-```
+## Typical Usage
 
-Electron 실행이 필요한 기능은 브라우저 단독 Vite 화면이 아니라 Electron 앱에서 테스트해야 합니다.  
-SSH, Agent 설치, 방화벽 설정, 로컬 저장소 접근 같은 기능은 Electron preload와 main process를 통해 동작합니다.
+1. Open the desktop app.
+2. Click **Add Server**.
+3. Choose the connection path:
+   - direct SSH server
+   - external HAProxy relay to an internal server
+4. Run **SSH Check**.
+5. Install or update the Agent and set the Agent port.
+6. Register the server only after the Agent API is reachable.
+7. Enter the server detail screen.
+8. Create a Minecraft Java server.
+9. Manage the container with start, stop, console, and delete actions.
 
-## 검증 명령
+When a game server is created in HAProxy relay mode, the app opens the internal game port, applies the external HAProxy TCP route, and opens the relay firewall port. When the container is deleted, the app can close the related firewall rules and remove only the game route while keeping the Agent route alive.
 
-```bash
-npm run desktop:typecheck
-npm run desktop:build
-go test ./...
-npm audit --json
-```
+## Current Game Support
 
-Windows에서 `go`가 PATH에 잡히지 않으면 기본 설치 경로를 직접 사용할 수 있습니다.
+The current implemented template is Minecraft Java.
 
-```powershell
-& "C:\Program Files\Go\bin\go.exe" test ./...
-```
-
-## Agent
-
-Agent는 원격 Linux 서버 내부에서 실행되는 작은 Go 프로그램입니다. 데스크톱 앱은 SSH로 서버에 접속해 Agent를 설치하거나 업데이트하고, 이후 Agent API를 통해 Docker 상태와 컨테이너 목록을 조회합니다.
-
-기본 Agent 포트:
-
-```text
-18080/tcp
-```
-
-Agent 설치 및 업데이트는 GitHub Release의 Linux 바이너리를 내려받아 교체하는 방식입니다. 이미 Agent가 설치된 서버라도 새로 설치하면 기존 바이너리를 교체하고, 게임 서버 데이터는 Docker 볼륨 경로에 남도록 설계합니다.
-
-## 데이터 경로
-
-게임 서버 데이터는 서버 내부의 고정 볼륨 경로에 저장됩니다.
+Minecraft data is stored in persistent server-side volume paths:
 
 ```text
 /remote-game-server/volume/{game}/{server-name}
 ```
 
-Snap Docker 환경에서는 bind mount 제약을 피하기 위해 사용자 홈 디렉터리 아래 경로를 사용합니다.
+For Snap Docker environments, OpenServerHub uses a home-directory path to avoid bind mount restrictions:
 
 ```text
 /home/{sshUser}/remote-game-server/volume/{game}/{server-name}
 ```
 
-## 방화벽 처리
+## Security Model
 
-원격 서버에서 포트를 열 때는 sudo 권한이 필요할 수 있습니다. 앱은 작업 시점에 SSH 비밀번호를 입력받고, 해당 작업에만 사용합니다.
+The Agent is not intended to be left as an unauthenticated public endpoint. OpenServerHub issues and stores an Agent token during setup, then uses that token for Agent API calls.
 
-- Agent 포트: `18080/tcp`
-- Minecraft Java 기본 내부 포트: `25565/tcp`
-- 게임 서버 외부 포트: 사용자가 입력
+For remote Linux actions that require elevated privileges, the desktop app asks for an SSH or sudo password at the moment of the operation. These passwords are used for the current action and are not stored as part of the registered server record.
 
-컨테이너 삭제 시에는 방화벽 규칙을 유지할지, 허용 규칙을 삭제할지, 차단 규칙을 추가할지 선택할 수 있도록 확장 중입니다.
+For HAProxy relay setups, firewall and route changes can require credentials for both the internal server and the external relay node.
 
-## 향후 계획
+## Development
 
-- FRP 기반 Relay/Jump 서버 연결
-- UDP 게임 서버 지원
-- Nginx Stream 방식은 자동 수정 대신 사용자 안내 가이드 제공
-- 더 쉬운 서버 등록 마법사 UI
-- Agent 설치와 Docker 설치 가이드 고도화
-- Windows/macOS 서버 Agent 지원 검토
+Install dependencies:
 
-## 현재 상태
+```bash
+npm install
+```
 
-이 프로젝트는 실제 제품화를 목표로 시작된 초기 개발 단계입니다. 현재는 Minecraft Java 서버 생성과 원격 Linux Agent 관리 흐름을 우선 구현하고 있으며, 사용자가 직접 원격 서버에서 테스트하면서 UI와 동작을 빠르게 개선하고 있습니다.
+Run the desktop app in development:
+
+```bash
+npm run desktop:dev
+```
+
+Electron-only features such as SSH, Agent installation, firewall changes, and local storage must be tested in the Electron runtime, not only in a browser tab.
+
+Build and type-check:
+
+```bash
+npm run desktop:typecheck
+npm run desktop:build
+```
+
+Run Go tests from the service modules:
+
+```bash
+cd services/agent
+go test ./...
+```
+
+```bash
+cd services/relay
+go test ./...
+```
+
+## Project Structure
+
+```text
+apps/
+  desktop/      Electron, React, TypeScript, and Vite desktop app
+services/
+  agent/        Go Agent installed on managed servers
+  relay/        Experimental relay service area
+docs/
+  plans/        Planning documents
+  working/      Stage-by-stage working notes
+  feedback/     Feedback and decision records
+  troubleshooting/
+scripts/        Build and helper scripts
+```
+
+## Collaboration With AI
+
+OpenServerHub has been developed with an AI pair-programming workflow. The human operator owns direction, architecture, approval, and final testing. The AI collaborator writes implementation plans, modifies code after approval, records working documents, runs local verification, and responds to real test feedback from the operator's servers.
+
+This workflow shaped several parts of the project:
+
+- server-first navigation replaced a feature-first sidebar
+- Agent status checks became automatic on server entry
+- public exposure controls were removed from the main navigation
+- HAProxy relay support was added after private-network testing
+- firewall cleanup, Agent cleanup, and HAProxy route cleanup were refined from live failure reports
+- large UI files started being split into smaller components after the operator requested stricter maintainability
+
+The repository intentionally keeps planning, reports, feedback notes, and troubleshooting documents under `docs/` so implementation decisions remain traceable.
