@@ -61,7 +61,7 @@ Electron 실행 환경에서는 등록된 서버 목록을 앱의 `userData` 경
 ```text
 Local Agent: http://127.0.0.1:18080
 AWS Agent: http://203.0.113.10:18080
-Internal Agent: http://192.168.219.105:18080
+Internal Agent: http://{internalServerIp}:18080
 ```
 
 선택된 서버가 바뀌면 Desktop은 해당 서버의 컨테이너 목록을 비우고, 사용자가 `Agent 확인` 또는 `컨테이너 새로고침`을 눌렀을 때 해당 Agent에서 목록을 다시 가져온다.

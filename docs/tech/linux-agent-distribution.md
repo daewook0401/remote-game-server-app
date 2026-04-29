@@ -35,7 +35,7 @@ docker run -d \
   --name remote-game-agent \
   --restart unless-stopped \
   -p 18080:18080 \
-  -e AGENT_TOKEN=change-me \
+  -e AGENT_TOKEN=<example-agent-token> \
   -e AGENT_ADDR=0.0.0.0:18080 \
   -e AGENT_DOCKER_MODE=cli \
   -e AGENT_DOCKER_PATH=docker \
@@ -77,7 +77,7 @@ systemd service:
 ## Agent 실행 환경
 
 ```bash
-AGENT_TOKEN=change-me
+AGENT_TOKEN=<example-agent-token>
 AGENT_ADDR=0.0.0.0:18080
 AGENT_DOCKER_MODE=cli
 AGENT_DOCKER_PATH=docker

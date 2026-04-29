@@ -46,14 +46,14 @@ AGENT_DOCKER_PATH=docker
 Agent 실행 시 `AGENT_TOKEN`을 설정하면 `/docker/*` API는 Bearer 토큰을 요구한다.
 
 ```powershell
-$env:AGENT_TOKEN="secret-token"
+$env:AGENT_TOKEN="<example-agent-token>"
 go run ./cmd/agent
 ```
 
 Desktop은 서버 등록 정보의 `Agent token` 값을 요청 헤더에 넣는다.
 
 ```http
-Authorization: Bearer secret-token
+Authorization: Bearer <example-agent-token>
 ```
 
 `AGENT_TOKEN`이 비어 있으면 기존처럼 인증 없이 동작한다. `/healthz`는 헬스체크 용도로 토큰 없이 접근 가능하다.

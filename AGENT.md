@@ -66,6 +66,36 @@ Communication policy:
 - 불확실한 내용을 사실처럼 말하지 않는다.
   - MUST NOT present assumptions as facts.
 
+## 2.1 보안 및 민감 정보 규칙
+
+코드, 문서, 보고서, 트러블슈팅 기록, 커밋 메시지에는 실제 운영 환경의 민감 정보를 남기지 않는다.
+
+다음 정보는 실제 값으로 기록하지 않는다.
+
+- 실제 Agent token, API token, access key, secret key
+- SSH password, sudo password, private key, public key 원문
+- 실제 서버 도메인, 공인 IP, SSH 포트, 사용자명
+- 실제 내부망 IP, 내부망 대역, 점프 서버 구조
+- 실제 Agent URL, HAProxy 관리 URL, 운영 중인 게임 서버 주소
+- 방화벽 허용 IP/CIDR 중 개인 또는 운영 환경을 식별할 수 있는 값
+
+문서나 예시가 필요하면 반드시 placeholder 또는 문서용 예약 대역을 사용한다.
+
+- 토큰: `<example-agent-token>`
+- 비밀번호: `<password>`
+- 내부 서버: `{internalServerIp}`, `{internalServerHost}`
+- 경유 서버: `{relayServerHost}`, `{relayPrivateIp}`
+- 문서용 IP: `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`
+
+작업 중 로그, 스크린샷, 사용자 메시지에서 실제 민감 정보가 보이면 그대로 문서에 옮기지 않고 마스킹한다.
+
+Security policy:
+
+- MUST NOT commit real secrets or real infrastructure identifiers.
+- MUST redact real domains, IPs, users, ports, tokens, keys, and passwords before writing reports.
+- MUST use placeholders or documentation-reserved IP ranges in public-facing docs.
+- MUST treat troubleshooting snippets as potentially sensitive until reviewed.
+
 ## 3. 작업 절차
 
 모든 작업은 아래 순서를 따른다.
@@ -471,4 +501,3 @@ Only the human operator can approve final completion.
 사람은 생각을 멈추지 않는다. AI는 속도를 높인다. 문서는 기억을 보존한다. 검증은 품질을 지킨다.
 
 The human thinks. The AI accelerates. Documents preserve memory. Verification protects quality.
-

@@ -6,7 +6,7 @@
 stream {
     server {
         listen 31001;
-        proxy_pass 192.168.219.105:25565;
+        proxy_pass {internalServerIp}:25565;
     }
 }
 ```
