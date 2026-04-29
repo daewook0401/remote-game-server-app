@@ -37,6 +37,7 @@ import type {
 type NoticeKind = "info" | "success" | "warning" | "error";
 type DeleteTarget = {
   container: ContainerSummary;
+  step: "scope" | "firewall";
   deleteData: boolean;
   confirmation: string;
   firewallMode: "keep" | "deleteAllow" | "deny";
@@ -321,7 +322,14 @@ export function ServerManagementPage() {
         return;
       }
 
-      setDeleteTarget({ container, deleteData: false, confirmation: "", firewallMode: "keep", firewallPassword: "" });
+      setDeleteTarget({
+        container,
+        step: "scope",
+        deleteData: false,
+        confirmation: "",
+        firewallMode: "keep",
+        firewallPassword: ""
+      });
       return;
     }
 
@@ -382,6 +390,31 @@ export function ServerManagementPage() {
       setNoticeKind("error");
       setMessage(error instanceof Error ? error.message : "컨테이너 삭제 요청 실패");
     }
+  }
+
+  function handleNextDeleteStep() {
+    if (!deleteTarget) {
+      return;
+    }
+
+    if (deleteTarget.deleteData && deleteTarget.confirmation !== deleteTarget.container.name) {
+      setNoticeKind("error");
+      setMessage("전체 데이터 삭제를 진행하려면 서버 이름을 정확히 입력해야 합니다.");
+      return;
+    }
+
+    if (deleteTarget.deleteData && !deleteTarget.container.volumePath) {
+      setNoticeKind("error");
+      setMessage("이 컨테이너는 관리 볼륨 경로를 확인할 수 없어 전체 데이터 삭제를 자동으로 진행할 수 없습니다.");
+      return;
+    }
+
+    if (activeServer?.targetType === "local") {
+      void handleConfirmDeleteContainer();
+      return;
+    }
+
+    setDeleteTarget({ ...deleteTarget, step: "firewall" });
   }
 
   async function handleCheckAgent() {
@@ -1336,85 +1369,109 @@ export function ServerManagementPage() {
       {dockerGuide ? <DockerInstallGuide issue={dockerGuide.issue} osType={dockerGuide.osType} /> : null}
 
       {deleteTarget ? (
-        <AppModal onClose={() => setDeleteTarget(undefined)} title="게임 서버 삭제">
-          <p className="helperText">
-            삭제 방식을 선택하세요. 컨테이너만 삭제하면 맵 데이터와 설정 파일은 서버 볼륨에 남습니다.
-          </p>
-          <label className="checkRow">
-            <input
-              checked={!deleteTarget.deleteData}
-              onChange={() => setDeleteTarget({ ...deleteTarget, deleteData: false, confirmation: "" })}
-              type="radio"
-            />
-            컨테이너만 삭제하고 맵 데이터는 유지
-          </label>
-          <label className="checkRow">
-            <input
-              checked={deleteTarget.deleteData}
-              onChange={() => setDeleteTarget({ ...deleteTarget, deleteData: true })}
-              type="radio"
-            />
-            전체 데이터 삭제
-          </label>
-          {deleteTarget.deleteData ? (
-            <div className="dangerChoice">
-              <strong>맵 데이터, 설정, 로그가 모두 사라집니다.</strong>
-              <span>계속하려면 서버 이름 `{deleteTarget.container.name}`을 그대로 입력하세요.</span>
-              <input
-                className="textInput"
-                onChange={(event) => setDeleteTarget({ ...deleteTarget, confirmation: event.target.value })}
-                value={deleteTarget.confirmation}
-              />
-            </div>
-          ) : null}
-          {activeServer?.targetType !== "local" ? (
-            <div className="dangerChoice">
-              <strong>방화벽 포트 정리</strong>
+        <AppModal
+          onClose={() => setDeleteTarget(undefined)}
+          title={deleteTarget.step === "scope" ? "게임 서버 삭제" : "방화벽 포트 정리"}
+        >
+          {deleteTarget.step === "scope" ? (
+            <>
+              <p className="helperText">
+                먼저 삭제 범위를 선택하세요. 컨테이너만 삭제하면 맵 데이터와 설정 파일은 서버 볼륨에 남습니다.
+              </p>
               <label className="checkRow">
                 <input
-                  checked={deleteTarget.firewallMode === "keep"}
-                  onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "keep", firewallPassword: "" })}
+                  checked={!deleteTarget.deleteData}
+                  onChange={() => setDeleteTarget({ ...deleteTarget, deleteData: false, confirmation: "" })}
                   type="radio"
                 />
-                방화벽은 그대로 둠
+                컨테이너만 삭제하고 맵 데이터는 유지
               </label>
               <label className="checkRow">
                 <input
-                  checked={deleteTarget.firewallMode === "deleteAllow"}
-                  onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "deleteAllow" })}
+                  checked={deleteTarget.deleteData}
+                  onChange={() => setDeleteTarget({ ...deleteTarget, deleteData: true })}
                   type="radio"
                 />
-                열어둔 허용 규칙 삭제
+                전체 데이터 삭제
               </label>
-              <label className="checkRow">
-                <input
-                  checked={deleteTarget.firewallMode === "deny"}
-                  onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "deny" })}
-                  type="radio"
-                />
-                차단 규칙 추가
-              </label>
-              {deleteTarget.firewallMode !== "keep" ? (
-                <label className="fieldGroup">
-                  <span>SSH password</span>
+              {deleteTarget.deleteData ? (
+                <div className="dangerChoice">
+                  <strong>맵 데이터, 설정, 로그가 모두 사라집니다.</strong>
+                  <span>계속하려면 서버 이름 `{deleteTarget.container.name}`을 그대로 입력하세요.</span>
                   <input
                     className="textInput"
-                    onChange={(event) => setDeleteTarget({ ...deleteTarget, firewallPassword: event.target.value })}
-                    type="password"
-                    value={deleteTarget.firewallPassword}
+                    onChange={(event) => setDeleteTarget({ ...deleteTarget, confirmation: event.target.value })}
+                    value={deleteTarget.confirmation}
                   />
-                </label>
+                </div>
               ) : null}
-            </div>
-          ) : null}
-          <div className="modalActions">
-            <button className="secondaryButton" onClick={() => setDeleteTarget(undefined)} type="button">
-              취소
-            </button>
-            <button className="secondaryButton warningButton" onClick={handleConfirmDeleteContainer} type="button">
-              삭제
-            </button>
-          </div>
+              <div className="modalActions">
+                <button className="secondaryButton" onClick={() => setDeleteTarget(undefined)} type="button">
+                  취소
+                </button>
+                <button className="primaryButton" onClick={handleNextDeleteStep} type="button">
+                  다음
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="helperText">
+                마지막으로 게임 포트 방화벽 규칙을 어떻게 처리할지 선택하세요. 방화벽 변경에는 SSH 비밀번호와 sudo 권한이 필요할 수 있습니다.
+              </p>
+              <div className="dangerChoice">
+                <strong>방화벽 포트 정리</strong>
+                <label className="checkRow">
+                  <input
+                    checked={deleteTarget.firewallMode === "keep"}
+                    onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "keep", firewallPassword: "" })}
+                    type="radio"
+                  />
+                  방화벽은 그대로 둠
+                </label>
+                <label className="checkRow">
+                  <input
+                    checked={deleteTarget.firewallMode === "deleteAllow"}
+                    onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "deleteAllow" })}
+                    type="radio"
+                  />
+                  열어둔 허용 규칙 삭제
+                </label>
+                <label className="checkRow">
+                  <input
+                    checked={deleteTarget.firewallMode === "deny"}
+                    onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "deny" })}
+                    type="radio"
+                  />
+                  차단 규칙 추가
+                </label>
+                {deleteTarget.firewallMode !== "keep" ? (
+                  <label className="fieldGroup">
+                    <span>SSH password</span>
+                    <input
+                      autoFocus
+                      className="textInput"
+                      onChange={(event) => setDeleteTarget({ ...deleteTarget, firewallPassword: event.target.value })}
+                      type="password"
+                      value={deleteTarget.firewallPassword}
+                    />
+                  </label>
+                ) : null}
+              </div>
+              <div className="modalActions">
+                <button
+                  className="secondaryButton"
+                  onClick={() => setDeleteTarget({ ...deleteTarget, step: "scope" })}
+                  type="button"
+                >
+                  이전
+                </button>
+                <button className="secondaryButton warningButton" onClick={handleConfirmDeleteContainer} type="button">
+                  삭제
+                </button>
+              </div>
+            </>
+          )}
         </AppModal>
       ) : null}
 
