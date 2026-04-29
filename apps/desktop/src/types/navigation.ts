@@ -1,2 +1,1 @@
-export type AppRoute = "servers" | "console" | "publish" | "guides";
-
+export type AppRoute = "servers" | "guides";

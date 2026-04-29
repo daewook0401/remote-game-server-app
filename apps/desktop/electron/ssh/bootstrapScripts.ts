@@ -67,7 +67,37 @@ export function agentPrepareCommand(request: AgentPrepareRequest) {
     "  nohup sh -c \"cd $AGENT_DIR && . ./.env && exec $AGENT_BIN\" >/tmp/remote-game-agent.log 2>&1 &",
     "  sleep 1;",
     "fi;",
+    "if command -v ufw >/dev/null 2>&1; then $SUDO ufw allow 18080/tcp >/dev/null 2>&1 || true; fi;",
+    "if command -v firewall-cmd >/dev/null 2>&1; then $SUDO firewall-cmd --permanent --add-port=18080/tcp >/dev/null 2>&1 || true; $SUDO firewall-cmd --reload >/dev/null 2>&1 || true; fi;",
+    "echo 'AGENT_FIREWALL_OPENED=true';",
     "if [ -f $AGENT_BIN ]; then echo 'AGENT_INSTALLED=true'; else echo 'AGENT_INSTALLED=false'; fi;",
     "if (command -v ss >/dev/null 2>&1 && ss -ltn | grep -q ':18080 ') || (command -v netstat >/dev/null 2>&1 && netstat -ltn | grep -q ':18080 ') || (command -v lsof >/dev/null 2>&1 && lsof -iTCP:18080 -sTCP:LISTEN >/dev/null 2>&1); then echo 'AGENT_PORT_OPEN=true'; echo 'AGENT_STARTED=true'; else echo 'AGENT_PORT_OPEN=false'; echo 'AGENT_STARTED=false'; fi;"
+  ].join(" ");
+}
+
+export function agentRemoveCommand(request: { closeAgentFirewallPort: boolean }) {
+  const firewallCommands = request.closeAgentFirewallPort
+    ? [
+        "if command -v ufw >/dev/null 2>&1; then $SUDO ufw delete allow 18080/tcp >/dev/null 2>&1 || true; fi;",
+        "if command -v firewall-cmd >/dev/null 2>&1; then $SUDO firewall-cmd --permanent --remove-port=18080/tcp >/dev/null 2>&1 || true; $SUDO firewall-cmd --reload >/dev/null 2>&1 || true; fi;",
+        "echo 'AGENT_FIREWALL_CLOSED=true';"
+      ]
+    : ["echo 'AGENT_FIREWALL_CLOSED=false';"];
+
+  return [
+    "set -u;",
+    "AGENT_DIR=/opt/remote-game-agent;",
+    "SERVICE_FILE=/etc/systemd/system/remote-game-agent.service;",
+    "if [ \"$(id -u)\" -ne 0 ]; then SUDO='sudo -S'; else SUDO=; fi;",
+    "if command -v systemctl >/dev/null 2>&1; then",
+    "  $SUDO systemctl stop remote-game-agent >/dev/null 2>&1 || true;",
+    "  $SUDO systemctl disable remote-game-agent >/dev/null 2>&1 || true;",
+    "fi;",
+    "pkill -f \"$AGENT_DIR/agent\" >/dev/null 2>&1 || true;",
+    "$SUDO rm -f $SERVICE_FILE;",
+    "if command -v systemctl >/dev/null 2>&1; then $SUDO systemctl daemon-reload >/dev/null 2>&1 || true; fi;",
+    ...firewallCommands,
+    "$SUDO rm -rf $AGENT_DIR;",
+    "if [ ! -e $SERVICE_FILE ] && [ ! -d $AGENT_DIR ]; then echo 'AGENT_REMOVED=true'; else echo 'AGENT_REMOVED=false'; fi;"
   ].join(" ");
 }

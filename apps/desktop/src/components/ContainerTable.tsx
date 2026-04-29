@@ -5,6 +5,7 @@ interface ContainerTableProps {
   containers: ContainerSummary[];
   pendingAction?: ContainerActionRequest;
   onAddContainer?: () => void;
+  onOpenConsole?: (container: ContainerSummary) => void;
   onRefreshContainers?: () => void;
   onAction: (containerId: string, action: ContainerActionRequest["action"]) => void;
   onRequestAction: (containerId: string, action: ContainerActionRequest["action"]) => void;
@@ -13,6 +14,7 @@ interface ContainerTableProps {
 export function ContainerTable({
   containers,
   onAddContainer,
+  onOpenConsole,
   onRefreshContainers,
   onAction,
   onRequestAction,
@@ -25,7 +27,7 @@ export function ContainerTable({
   return (
     <article className="panel widePanel">
       <div className="panelHeader">
-        <h2>Docker 컨테이너</h2>
+        <h2>게임 서버 목록</h2>
         <div className="headerActions">
           {onRefreshContainers ? (
             <button className="secondaryButton compactButton" onClick={onRefreshContainers} type="button">
@@ -65,6 +67,11 @@ export function ContainerTable({
                 <td>{container.volumePath || "-"}</td>
                 <td>
                   <div className="tableActions">
+                    {onOpenConsole ? (
+                      <button className="smallButton" onClick={() => onOpenConsole(container)} type="button">
+                        콘솔
+                      </button>
+                    ) : null}
                     <button
                       className={isPending(container.id, "start") ? "smallButton confirm" : "smallButton"}
                       onClick={() =>

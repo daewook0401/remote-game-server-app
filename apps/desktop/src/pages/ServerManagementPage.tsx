@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
+import { AgentUpdateModal } from "../components/AgentUpdateModal";
 import { AgentStatusPanel } from "../components/AgentStatusPanel";
 import { AppModal } from "../components/AppModal";
+import { ContainerConsolePanel } from "../components/ContainerConsolePanel";
+import { ContainerDeleteModal, type ContainerDeleteTarget } from "../components/ContainerDeleteModal";
 import { ContainerTable } from "../components/ContainerTable";
+import { CreateServerConfirmModal } from "../components/CreateServerConfirmModal";
 import { DockerInstallGuide } from "../components/DockerInstallGuide";
 import { ServerCreatePanel } from "../components/ServerCreatePanel";
 import { ServerCreateReadinessPanel } from "../components/ServerCreateReadinessPanel";
 import { ServerCard } from "../components/ServerCard";
+import { ServerDeleteModal, type ServerDeleteTarget } from "../components/ServerDeleteModal";
+import { ServerDetailView } from "../components/ServerDetailView";
 import { ServerRegistrationPanel } from "../components/ServerRegistrationPanel";
 import { ToastViewport, type ToastMessage } from "../components/ToastViewport";
 import { Topbar } from "../components/Topbar";
@@ -17,9 +23,25 @@ import {
   getDockerStatus,
   listManagedContainers
 } from "../services/agentClient";
-import { prepareRemoteAgent } from "../services/agentBootstrapClient";
+import { prepareRemoteAgent, removeRemoteAgent } from "../services/agentBootstrapClient";
 import { closeRemoteFirewallPort, openRemoteFirewallPort } from "../services/firewallClient";
+import { applyRemoteHaproxy, checkRemoteHaproxy, installRemoteHaproxy, removeRemoteHaproxyRoutes } from "../services/haproxyClient";
 import { loadStoredServers, saveStoredServers } from "../services/serverStorage";
+import {
+  AGENT_PORT,
+  buildAgentBaseUrl,
+  buildAgentHaproxyApplyRequest,
+  buildGameHaproxyApplyRequest,
+  buildGameHaproxyRemoveRequest,
+  buildHaproxySshRequest,
+  buildProxyServerId,
+  buildServerFromRegistration as createServerFromRegistration,
+  buildTargetSshRequest,
+  createDefaultRegistrationForm,
+  isDocumentationCidrs,
+  normalizeRegistrationForm
+} from "../services/serverRegistrationModel";
+import { buildCreateReadiness as buildCreateReadinessModel, dockerMessage } from "../services/serverReadiness";
 import { testSSHConnection } from "../services/sshClient";
 import type { ContainerActionRequest, ContainerSummaryResponse, DockerStatusResponse } from "../types/api";
 import type {
@@ -27,7 +49,6 @@ import type {
   DockerIssue,
   ManagedServer,
   ServerCreateForm,
-  ServerCreateReadiness,
   FirewallClosePortRequest,
   FirewallOpenPortRequest,
   ServerOsType,
@@ -35,16 +56,7 @@ import type {
 } from "../types/server";
 
 type NoticeKind = "info" | "success" | "warning" | "error";
-type DeleteTarget = {
-  container: ContainerSummary;
-  step: "scope" | "firewall";
-  deleteData: boolean;
-  confirmation: string;
-  firewallMode: "keep" | "deleteAllow" | "deny";
-  firewallPassword: string;
-};
 
-const AGENT_PORT = 18080;
 const PRODUCT_VOLUME_ROOT = "/remote-game-server/volume";
 
 function readServerDetailIdFromHash() {
@@ -72,33 +84,26 @@ export function ServerManagementPage() {
     memory: "2G",
     eulaAccepted: true
   });
-  const [registrationForm, setRegistrationForm] = useState<ServerRegistrationForm>({
-    name: "새 원격 서버",
-    targetType: "remote",
-    osType: "linux-ubuntu",
-    sshHost: "",
-    sshPort: 22,
-    sshUser: "",
-    sshAuthMethod: "key",
-    sshKeyPath: "",
-    sshPassword: "",
-    agentBaseUrl: "http://127.0.0.1:18080",
-    agentToken: "",
-    agentDownloadUrl: "https://github.com/daewook0401/remote-game-server-app/releases/latest/download/agent-linux-amd64"
-  });
+  const [registrationForm, setRegistrationForm] = useState<ServerRegistrationForm>(() => createDefaultRegistrationForm());
   const [pendingCreate, setPendingCreate] = useState(false);
   const [pendingAction, setPendingAction] = useState<ContainerActionRequest>();
   const [createConfirmModalOpen, setCreateConfirmModalOpen] = useState(false);
   const [createSudoPassword, setCreateSudoPassword] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>();
+  const [deleteTarget, setDeleteTarget] = useState<ContainerDeleteTarget>();
+  const [serverDeleteTarget, setServerDeleteTarget] = useState<ServerDeleteTarget>();
   const [pendingFirewallOpen, setPendingFirewallOpen] = useState(false);
+  const [pendingRegistrationAction, setPendingRegistrationAction] = useState<"ssh" | "agent" | "firewall" | "register">();
+  const [haproxyInstallModalOpen, setHaproxyInstallModalOpen] = useState(false);
+  const [haproxyInstallPassword, setHaproxyInstallPassword] = useState("");
   const [agentUpdateModalOpen, setAgentUpdateModalOpen] = useState(false);
   const [agentUpdatePassword, setAgentUpdatePassword] = useState("");
   const [serverRegistrationOpen, setServerRegistrationOpen] = useState(false);
   const [gameCreateOpen, setGameCreateOpen] = useState(false);
+  const [consoleContainer, setConsoleContainer] = useState<ContainerSummary>();
   const [detailServerId, setDetailServerId] = useState(() => readServerDetailIdFromHash());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [dockerGuide, setDockerGuide] = useState<{ issue: DockerIssue; osType: ServerOsType }>();
+  const [autoCheckedServerIds, setAutoCheckedServerIds] = useState<string[]>([]);
   const detailServer = detailServerId ? managedServers.find((server) => server.id === detailServerId) : undefined;
   const activeServer = detailServer ?? managedServers.find((server) => server.id === activeServerId) ?? managedServers[0];
   const isServerDetailRoute = Boolean(detailServer);
@@ -106,7 +111,19 @@ export function ServerManagementPage() {
   const activeAgentToken = activeServer?.agentToken;
   const isCliMode = dockerStatus?.mode === "cli";
   const isAgentVersionCurrent = dockerStatus?.agentVersion === EXPECTED_AGENT_VERSION;
-  const createReadiness = buildCreateReadiness();
+  const createReadiness = buildCreateReadinessModel({
+    activeServer,
+    createForm,
+    dockerStatus,
+    expectedAgentVersion: EXPECTED_AGENT_VERSION,
+    isAgentVersionCurrent
+  });
+  const shouldWarnAgentExposure = Boolean(
+    activeServer &&
+      activeServer.targetType !== "local" &&
+      !activeServer.agentToken &&
+      !isLoopbackAgentUrl(activeServer.agentBaseUrl)
+  );
 
   useEffect(() => {
     if (message === "Agent API 대기") {
@@ -190,6 +207,19 @@ export function ServerManagementPage() {
       setMessage(error instanceof Error ? error.message : "서버 정보를 저장하지 못했습니다.");
     });
   }, [isStorageReady, managedServers]);
+
+  useEffect(() => {
+    if (!isStorageReady || !isServerDetailRoute || !activeServer) {
+      return;
+    }
+
+    if (autoCheckedServerIds.includes(activeServer.id)) {
+      return;
+    }
+
+    setAutoCheckedServerIds((current) => [...current, activeServer.id]);
+    void checkAgentForServer(activeServer, "auto");
+  }, [isStorageReady, isServerDetailRoute, activeServer?.id]);
 
   function upsertContainer(container: ContainerSummaryResponse) {
     setContainers((current) => {
@@ -324,11 +354,13 @@ export function ServerManagementPage() {
 
       setDeleteTarget({
         container,
+        server: activeServer,
         step: "scope",
         deleteData: false,
         confirmation: "",
         firewallMode: "keep",
-        firewallPassword: ""
+        firewallPassword: "",
+        haproxyPassword: ""
       });
       return;
     }
@@ -356,12 +388,33 @@ export function ServerManagementPage() {
     }
 
     try {
+      if (
+        activeServer?.connectionMode === "jumpSsh" &&
+        activeServer.agentAccessMode === "haproxy" &&
+        activeServer.haproxyAuthMethod === "password" &&
+        !deleteTarget.haproxyPassword
+      ) {
+        setNoticeKind("error");
+        setMessage("HAProxy 게임 포트 라우트를 정리하려면 경유 서버 SSH/sudo 비밀번호가 필요합니다.");
+        return;
+      }
+
       if (deleteTarget.firewallMode !== "keep") {
+        if (
+          activeServer?.connectionMode === "jumpSsh" &&
+          !deleteTarget.haproxyPassword
+        ) {
+          setNoticeKind("error");
+          setMessage("경유 서버의 외부 포트 방화벽도 정리하려면 HAProxy SSH/sudo 비밀번호가 필요합니다.");
+          return;
+        }
+
         const firewallRequest = buildCloseFirewallRequest(
           activeServer,
           deleteTarget.container.port,
           deleteTarget.firewallPassword,
-          deleteTarget.firewallMode
+          deleteTarget.firewallMode,
+          deleteTarget.haproxyPassword
         );
         if (!firewallRequest) {
           setNoticeKind("error");
@@ -370,6 +423,16 @@ export function ServerManagementPage() {
         }
 
         await closeRemoteFirewallPort(firewallRequest);
+
+        const relayFirewallRequest = buildHaproxyCloseFirewallRequest(
+          activeServer,
+          deleteTarget.container.port,
+          deleteTarget.haproxyPassword,
+          deleteTarget.firewallMode
+        );
+        if (relayFirewallRequest) {
+          await closeRemoteFirewallPort(relayFirewallRequest);
+        }
       }
 
       await applyContainerAction({
@@ -378,13 +441,32 @@ export function ServerManagementPage() {
         deleteData: deleteTarget.deleteData,
         volumePath: deleteTarget.container.volumePath
       }, activeAgentBaseUrl, activeAgentToken);
+
+      let haproxyCleanupFailed = false;
+      if (activeServer?.connectionMode === "jumpSsh" && activeServer.agentAccessMode === "haproxy") {
+        try {
+          await removeRemoteHaproxyRoutes(
+            buildGameHaproxyRemoveRequest(
+              activeServer,
+              deleteTarget.container.port,
+              "tcp",
+              deleteTarget.haproxyPassword
+            )
+          );
+        } catch {
+          haproxyCleanupFailed = true;
+        }
+      }
+
       setContainers((current) => current.filter((item) => item.id !== deleteTarget.container.id));
       setDeleteTarget(undefined);
-      setNoticeKind("success");
+      setNoticeKind(haproxyCleanupFailed ? "warning" : "success");
       setMessage(
-        deleteTarget.deleteData
-          ? `${deleteTarget.container.name} 컨테이너와 전체 데이터를 삭제했습니다.`
-          : `${deleteTarget.container.name} 컨테이너를 삭제했습니다. 볼륨 데이터는 유지됩니다.`
+        haproxyCleanupFailed
+          ? `${deleteTarget.container.name} 컨테이너는 삭제했지만 HAProxy 게임 포트 라우트 정리는 확인이 필요합니다.`
+          : deleteTarget.deleteData
+            ? `${deleteTarget.container.name} 컨테이너와 전체 데이터를 삭제했습니다.`
+            : `${deleteTarget.container.name} 컨테이너를 삭제했습니다. 볼륨 데이터는 유지됩니다.`
       );
     } catch (error) {
       setNoticeKind("error");
@@ -417,6 +499,35 @@ export function ServerManagementPage() {
     setDeleteTarget({ ...deleteTarget, step: "firewall" });
   }
 
+  async function checkAgentForServer(server: ManagedServer, mode: "auto" | "manual") {
+    try {
+      const status = await getDockerStatus(server.agentBaseUrl, server.agentToken);
+      const managedContainers = await listManagedContainers(server.agentBaseUrl, server.agentToken);
+      setDockerStatus(status);
+      setContainers(managedContainers);
+      updateServerStatus(server.id, status, true);
+      const versionCurrent = status.agentVersion === EXPECTED_AGENT_VERSION;
+      setNoticeKind(versionCurrent && status.mode === "cli" ? "success" : "warning");
+      setMessage(
+        versionCurrent
+          ? `${server.name} Agent 상태 확인 완료: ${status.mode} mode, 컨테이너 ${managedContainers.length}개`
+          : `${server.name} Agent 업데이트 필요: 현재 ${status.agentVersion ?? "확인 불가"}, 필요 ${EXPECTED_AGENT_VERSION}`
+      );
+    } catch (error) {
+      setDockerStatus(undefined);
+      setContainers([]);
+      updateServerOffline(server.id);
+      setNoticeKind("error");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : mode === "auto"
+            ? "Agent 자동 상태 확인 실패"
+            : "Agent 상태 확인 실패"
+      );
+    }
+  }
+
   async function handleCheckAgent() {
     if (!activeServer) {
       setNoticeKind("error");
@@ -424,25 +535,7 @@ export function ServerManagementPage() {
       return;
     }
 
-    try {
-      const status = await getDockerStatus(activeServer.agentBaseUrl, activeServer.agentToken);
-      setDockerStatus(status);
-      const managedContainers = await listManagedContainers(activeServer.agentBaseUrl, activeServer.agentToken);
-      setContainers(managedContainers);
-      updateServerStatus(activeServer.id, status, true);
-      const versionCurrent = status.agentVersion === EXPECTED_AGENT_VERSION;
-      setNoticeKind(versionCurrent && status.mode === "cli" ? "success" : "warning");
-      setMessage(
-        versionCurrent
-          ? `${activeServer.name} Agent 상태 확인 완료: ${status.mode} mode, 컨테이너 ${managedContainers.length}개`
-          : `${activeServer.name} Agent 업데이트 필요: 현재 ${status.agentVersion ?? "확인 불가"}, 필요 ${EXPECTED_AGENT_VERSION}`
-      );
-    } catch (error) {
-      setDockerStatus(undefined);
-      updateServerOffline(activeServer.id);
-      setNoticeKind("error");
-      setMessage(error instanceof Error ? error.message : "Agent 상태 확인 실패");
-    }
+    await checkAgentForServer(activeServer, "manual");
   }
 
   async function refreshContainers() {
@@ -463,7 +556,7 @@ export function ServerManagementPage() {
     }
   }
 
-  function handleRegisterServer() {
+  async function handleRegisterServer() {
     const agentBaseUrl = buildAgentBaseUrl(registrationForm);
     if (!registrationForm.name || !agentBaseUrl) {
       setNoticeKind("error");
@@ -477,10 +570,44 @@ export function ServerManagementPage() {
       return;
     }
 
+    if (registrationForm.connectionMode === "jumpSsh" && isDocumentationCidrs(registrationForm.haproxyAllowedCidrs)) {
+      setNoticeKind("error");
+      setMessage("허용 IP/CIDR에 예시용 IP가 입력되어 있습니다. 비워두면 전체 허용이고, 제한하려면 실제 접속 PC의 공인 IP/32를 입력하세요.");
+      return;
+    }
+
+    setPendingRegistrationAction("register");
+    setNoticeKind("info");
+    setMessage("Agent API 접근을 확인한 뒤 서버를 등록합니다.");
+
+    let registrationStatus: DockerStatusResponse;
+    try {
+      if (registrationForm.connectionMode === "jumpSsh") {
+        await applyRemoteHaproxy({
+          ...buildAgentHaproxyApplyRequest(registrationForm),
+          sudoPassword: registrationForm.haproxyAuthMethod === "password" ? registrationForm.haproxyPassword : undefined
+        });
+      }
+
+      registrationStatus = await getDockerStatus(agentBaseUrl, registrationForm.agentToken || undefined);
+    } catch (error) {
+      setNoticeKind("error");
+      setMessage(
+        error instanceof Error
+          ? `Agent 설치 후 API 접근이 확인되어야 서버를 등록할 수 있습니다. ${error.message}`
+          : "Agent 설치 후 API 접근이 확인되어야 서버를 등록할 수 있습니다."
+      );
+      setPendingRegistrationAction(undefined);
+      return;
+    }
+
+    const agentReady = registrationStatus.mode === "cli" && registrationStatus.available;
     const nextServer: ManagedServer = {
       id: `${registrationForm.targetType}-${Date.now()}`,
       name: registrationForm.name,
       targetType: registrationForm.targetType,
+      connectionMode: registrationForm.connectionMode,
+      agentAccessMode: registrationForm.agentAccessMode,
       osType: registrationForm.osType,
       host:
         registrationForm.targetType === "local"
@@ -492,21 +619,35 @@ export function ServerManagementPage() {
       sshUser: registrationForm.sshUser || undefined,
       sshAuthMethod: registrationForm.targetType === "local" ? undefined : registrationForm.sshAuthMethod,
       sshKeyPath: registrationForm.sshKeyPath || undefined,
+      jumpHost: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyHost || undefined : undefined,
+      jumpPort: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyPort : undefined,
+      jumpUser: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyUser || undefined : undefined,
+      jumpAuthMethod: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyAuthMethod : undefined,
+      jumpKeyPath: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyKeyPath || undefined : undefined,
+      haproxyHost: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyHost || undefined : undefined,
+      haproxyPort: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyPort : undefined,
+      haproxyUser: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyUser || undefined : undefined,
+      haproxyAuthMethod: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyAuthMethod : undefined,
+      haproxyKeyPath: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyKeyPath || undefined : undefined,
+      haproxyAllowedCidrs: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyAllowedCidrs || undefined : undefined,
+      haproxyAgentProxyPort: registrationForm.connectionMode === "jumpSsh" ? registrationForm.haproxyAgentProxyPort : undefined,
       agentToken: registrationForm.agentToken || undefined,
-      status: "setupRequired",
-      agentStatus: "notInstalled",
-      dockerStatus: "unknown"
+      lastAgentPrepareStatus: agentReady ? "ready" : "failed",
+      lastAgentPrepareMessage: "Agent API 접근 확인 완료",
+      status: agentReady ? "connected" : "setupRequired",
+      agentStatus: "connected",
+      dockerStatus: agentReady ? "ready" : "needsSetup"
     };
 
     setManagedServers((current) => [...current, nextServer]);
     navigateToServerDetail(nextServer.id);
     setContainers([]);
-    setDockerStatus(undefined);
+    setDockerStatus(registrationStatus);
     setServerRegistrationOpen(false);
     setNoticeKind("success");
-    setMessage(`${nextServer.name} 등록 완료. Agent 확인을 눌러 연결 상태를 확인하세요.`);
+    setMessage(`${nextServer.name} 등록 완료. Agent API 접근이 확인되었습니다.`);
+    setPendingRegistrationAction(undefined);
   }
-
   async function handleTestSSHInput() {
     if (registrationForm.targetType === "local") {
       setNoticeKind("info");
@@ -533,17 +674,22 @@ export function ServerManagementPage() {
     }
 
     try {
+      setPendingRegistrationAction("ssh");
       setNoticeKind("info");
       setMessage("SSH 접속과 운영체제 확인을 진행합니다.");
-      const result = await testSSHConnection({
-        host: registrationForm.sshHost,
-        port: registrationForm.sshPort,
-        username: registrationForm.sshUser,
-        authMethod: registrationForm.sshAuthMethod,
-        password: registrationForm.sshAuthMethod === "password" ? registrationForm.sshPassword : undefined,
-        keyPath: registrationForm.sshAuthMethod === "key" ? registrationForm.sshKeyPath : undefined,
-        expectedOs: registrationForm.osType
-      });
+      if (registrationForm.connectionMode === "jumpSsh") {
+        const haproxyStatus = await checkRemoteHaproxy(buildHaproxySshRequest(registrationForm));
+        if (!haproxyStatus.installed) {
+          setPendingRegistrationAction(undefined);
+          setHaproxyInstallPassword("");
+          setHaproxyInstallModalOpen(true);
+          setNoticeKind("warning");
+          setMessage("외부망 경유 노드에 HAProxy가 없습니다. 설치 승인 후 다시 진행합니다.");
+          return;
+        }
+      }
+
+      const result = await testSSHConnection(buildTargetSshRequest(registrationForm));
 
       let agentApiReachable = false;
       try {
@@ -572,65 +718,72 @@ export function ServerManagementPage() {
       setNoticeKind("error");
       setMessage(error instanceof Error ? error.message : "SSH 접속 테스트 실패");
     }
+    setPendingRegistrationAction(undefined);
   }
 
   async function handlePrepareAgent(passwordOverride?: string) {
-    const sshPassword = passwordOverride ?? registrationForm.sshPassword;
+    const sshPassword = typeof passwordOverride === "string" ? passwordOverride : registrationForm.sshPassword;
+    const agentToken = ensureRemoteAgentToken(registrationForm) ?? "";
+    const effectiveForm = { ...registrationForm, agentToken };
     if (registrationForm.targetType === "local") {
       setNoticeKind("info");
       setMessage("로컬 서버는 Agent 준비가 필요하지 않습니다.");
       return;
     }
 
-    if (registrationForm.osType === "windows" || registrationForm.osType === "macos") {
+    if (effectiveForm.osType === "windows" || effectiveForm.osType === "macos") {
       setNoticeKind("error");
       setMessage("현재 Agent 자동 준비는 Linux 서버만 지원합니다.");
       return;
     }
 
-    if (!registrationForm.sshHost || !registrationForm.sshUser || !registrationForm.sshPort) {
+    if (!effectiveForm.sshHost || !effectiveForm.sshUser || !effectiveForm.sshPort) {
       setNoticeKind("error");
       setMessage("SSH host, port, user를 입력해야 합니다.");
       return;
     }
 
-    if (!registrationForm.agentDownloadUrl) {
+    if (!effectiveForm.agentDownloadUrl) {
       setNoticeKind("error");
       setMessage("Linux Agent 다운로드 URL이 필요합니다.");
       return;
     }
 
-    if (registrationForm.sshAuthMethod === "password" && !sshPassword) {
+    if (effectiveForm.sshAuthMethod === "password" && !sshPassword) {
       setNoticeKind("error");
       setMessage("패스워드 인증을 선택한 경우 SSH password가 필요합니다.");
       return;
     }
 
-    if (registrationForm.sshAuthMethod === "key" && !registrationForm.sshKeyPath) {
+    if (effectiveForm.sshAuthMethod === "key" && !effectiveForm.sshKeyPath) {
       setNoticeKind("error");
       setMessage("키 인증을 선택한 경우 SSH key path가 필요합니다.");
       return;
     }
 
     try {
+      setPendingRegistrationAction("agent");
       setNoticeKind("info");
       setMessage("SSH로 Linux Agent 준비를 진행합니다.");
       const result = await prepareRemoteAgent({
-        host: registrationForm.sshHost,
-        port: registrationForm.sshPort,
-        username: registrationForm.sshUser,
-        authMethod: registrationForm.sshAuthMethod,
-        password: registrationForm.sshAuthMethod === "password" ? sshPassword : undefined,
-        keyPath: registrationForm.sshAuthMethod === "key" ? registrationForm.sshKeyPath : undefined,
-        expectedOs: registrationForm.osType,
-        agentToken: registrationForm.agentToken || undefined,
-        downloadUrl: registrationForm.agentDownloadUrl
+        ...buildTargetSshRequest(effectiveForm, sshPassword),
+        agentToken,
+        downloadUrl: effectiveForm.agentDownloadUrl
       });
+
+      let effectiveAgentBaseUrl = effectiveForm.agentBaseUrl;
+      if (effectiveForm.connectionMode === "jumpSsh") {
+        const haproxyResult = await applyRemoteHaproxy(buildAgentHaproxyApplyRequest(effectiveForm));
+        if (!haproxyResult.applied) {
+          throw new Error("HAProxy Agent 경유 설정이 적용되지 않았습니다.");
+        }
+        effectiveAgentBaseUrl = buildAgentBaseUrl(effectiveForm);
+      }
 
       let agentApiReachable = false;
       let preparedStatus: DockerStatusResponse | undefined;
       try {
-        preparedStatus = await getDockerStatus(registrationForm.agentBaseUrl, registrationForm.agentToken || undefined);
+        preparedStatus = await getDockerStatus(effectiveAgentBaseUrl, agentToken);
         agentApiReachable = true;
       } catch {
         agentApiReachable = false;
@@ -643,23 +796,25 @@ export function ServerManagementPage() {
       const versionReady = preparedStatus?.agentVersion === EXPECTED_AGENT_VERSION;
       const dockerReady = preparedStatus?.mode === "cli" && preparedStatus.available;
       const ready = result.installed && result.started && result.agentPortOpen && agentApiReachable && versionReady && dockerReady;
-      const preparedServer = upsertPreparedServer(ready, agentApiReachable);
+      const preparedServerId = upsertPreparedServer(ready, agentApiReachable, agentToken);
       setNoticeKind(ready ? "success" : "warning");
       setMessage(
         [
           `Agent ${ready ? "업데이트 완료" : result.installed ? "설치됨, 확인 필요" : "설치 실패"}`,
           `실행 ${result.started ? "성공" : "확인 실패"}`,
           `포트 ${result.agentPortOpen ? "열림" : "닫힘"}`,
+          `내부 방화벽 ${result.firewallOpened ? "열림" : "확인 필요"}`,
           `API ${agentApiReachable ? "접근 가능" : "접근 불가"}`,
           `버전 ${preparedStatus?.agentVersion ?? "확인 불가"} / ${EXPECTED_AGENT_VERSION}`,
           `Docker ${preparedStatus?.mode ?? "확인 불가"}`,
-          `카드 ${preparedServer ? "반영됨" : "미반영"}`
+          `카드 ${preparedServerId ? "반영됨" : "미반영"}`
         ].join(" · ")
       );
     } catch (error) {
       setNoticeKind("error");
       setMessage(error instanceof Error ? error.message : "Agent 준비 실패");
     }
+    setPendingRegistrationAction(undefined);
   }
 
   function handleRequestAgentUpdate() {
@@ -671,6 +826,32 @@ export function ServerManagementPage() {
 
     setAgentUpdatePassword("");
     setAgentUpdateModalOpen(true);
+  }
+
+  async function handleConfirmHaproxyInstall() {
+    try {
+      setPendingRegistrationAction("ssh");
+      setNoticeKind("info");
+      setMessage("외부망 경유 노드에 HAProxy 설치를 진행합니다.");
+      const result = await installRemoteHaproxy({
+        ...buildHaproxySshRequest(registrationForm),
+        sudoPassword: haproxyInstallPassword || undefined
+      });
+
+      if (!result.installed) {
+        throw new Error("HAProxy 설치 후에도 haproxy 명령을 확인하지 못했습니다.");
+      }
+
+      setHaproxyInstallModalOpen(false);
+      setHaproxyInstallPassword("");
+      setNoticeKind("success");
+      setMessage("HAProxy 설치를 확인했습니다. SSH 확인을 다시 실행하세요.");
+    } catch (error) {
+      setNoticeKind("error");
+      setMessage(error instanceof Error ? error.message : "HAProxy 설치에 실패했습니다.");
+    } finally {
+      setPendingRegistrationAction(undefined);
+    }
   }
 
   async function handleConfirmAgentUpdate() {
@@ -696,6 +877,20 @@ export function ServerManagementPage() {
     if (registrationForm.targetType === "local") {
       setNoticeKind("info");
       setMessage("로컬 서버는 앱에서 원격 SSH Agent 포트 설정이 필요하지 않습니다.");
+      return;
+    }
+
+    if (registrationForm.connectionMode === "jumpSsh") {
+      try {
+        setNoticeKind("info");
+        setMessage("외부망 경유 노드의 HAProxy Agent 포트 설정을 적용합니다.");
+        const result = await applyRemoteHaproxy(buildAgentHaproxyApplyRequest(registrationForm));
+        setNoticeKind(result.applied ? "success" : "warning");
+        setMessage(result.applied ? "HAProxy Agent 포트 설정을 적용했습니다." : "HAProxy Agent 포트 설정 확인이 필요합니다.");
+      } catch (error) {
+        setNoticeKind("error");
+        setMessage(error instanceof Error ? error.message : "HAProxy Agent 포트 설정에 실패했습니다.");
+      }
       return;
     }
 
@@ -758,44 +953,49 @@ export function ServerManagementPage() {
       return;
     }
 
-    const request = buildPasswordFirewallRequest(server, createForm.externalPort, sudoPassword);
+    if (server.connectionMode === "jumpSsh" && server.agentAccessMode === "haproxy") {
+      const internalFirewallRequest = buildServerFirewallRequest(server, createForm.externalPort, sudoPassword);
+      if (!internalFirewallRequest) {
+        throw new Error("HAProxy 경유 게임 포트를 열려면 내부망 서버 SSH 정보와 sudo 비밀번호가 필요합니다.");
+      }
+
+      await openRemoteFirewallPort(internalFirewallRequest);
+      await applyRemoteHaproxy(buildGameHaproxyApplyRequest(server, createForm.externalPort, createForm.externalPort, "tcp", sudoPassword));
+      return;
+    }
+
+    const request = buildServerFirewallRequest(server, createForm.externalPort, sudoPassword);
     if (!request) {
-      throw new Error("게임 포트를 자동으로 열려면 SSH 비밀번호를 입력해야 합니다. 비밀번호는 sudo 입력으로만 사용하고 저장하지 않습니다.");
+      throw new Error("게임 포트를 자동으로 열려면 내부망 서버 SSH 정보와 sudo 비밀번호가 필요합니다. 비밀번호는 sudo 입력으로만 사용하고 저장하지 않습니다.");
     }
 
     await openRemoteFirewallPort(request);
   }
 
-  function buildPasswordFirewallRequest(server: ManagedServer, firewallPort: number, sudoPassword?: string): FirewallOpenPortRequest | undefined {
-    if (!server.sshHost || !server.sshUser) {
-      return undefined;
-    }
-
-    const sameHost = registrationForm.sshHost === server.sshHost;
-    const sameUser = registrationForm.sshUser === server.sshUser;
-    const password = sudoPassword || registrationForm.sshPassword;
-    if (!sameHost || !sameUser || !password) {
+  function buildServerFirewallRequest(server: ManagedServer, firewallPort: number, sudoPassword?: string): FirewallOpenPortRequest | undefined {
+    if (!server.sshHost || !server.sshUser || !server.sshAuthMethod || !sudoPassword) {
       return undefined;
     }
 
     return {
       host: server.sshHost,
-      port: server.sshPort ?? registrationForm.sshPort,
+      port: server.sshPort ?? 22,
       username: server.sshUser,
-      authMethod: "password",
-      password,
+      authMethod: server.sshAuthMethod,
+      password: server.sshAuthMethod === "password" ? sudoPassword : undefined,
+      keyPath: server.sshAuthMethod === "key" ? server.sshKeyPath : undefined,
       expectedOs: server.osType,
-      sudoPassword: password,
+      sudoPassword,
       protocol: "tcp",
       firewallPort
     };
   }
-
   function buildCloseFirewallRequest(
     server: ManagedServer | undefined,
     firewallPort: number,
     sudoPassword: string,
-    closeMode: FirewallClosePortRequest["closeMode"]
+    closeMode: FirewallClosePortRequest["closeMode"],
+    haproxyPassword?: string
   ): FirewallClosePortRequest | undefined {
     if (!server || server.targetType === "local" || !server.sshHost || !server.sshUser || !sudoPassword || !firewallPort) {
       return undefined;
@@ -805,8 +1005,49 @@ export function ServerManagementPage() {
       host: server.sshHost,
       port: server.sshPort ?? registrationForm.sshPort,
       username: server.sshUser,
-      authMethod: "password",
-      password: sudoPassword,
+      authMethod: server.sshAuthMethod ?? "password",
+      password: (server.sshAuthMethod ?? "password") === "password" ? sudoPassword : undefined,
+      keyPath: (server.sshAuthMethod ?? "password") === "key" ? server.sshKeyPath : undefined,
+      connectionMode: server.connectionMode,
+      jumpHost: server.connectionMode === "jumpSsh" ? server.haproxyHost : undefined,
+      jumpPort: server.connectionMode === "jumpSsh" ? server.haproxyPort : undefined,
+      jumpUsername: server.connectionMode === "jumpSsh" ? server.haproxyUser : undefined,
+      jumpAuthMethod: server.connectionMode === "jumpSsh" ? server.haproxyAuthMethod : undefined,
+      jumpPassword:
+        server.connectionMode === "jumpSsh" && server.haproxyAuthMethod === "password" ? haproxyPassword : undefined,
+      jumpKeyPath: server.connectionMode === "jumpSsh" && server.haproxyAuthMethod === "key" ? server.haproxyKeyPath : undefined,
+      expectedOs: server.osType,
+      sudoPassword,
+      protocol: "tcp",
+      firewallPort,
+      closeMode
+    };
+  }
+
+  function buildHaproxyCloseFirewallRequest(
+    server: ManagedServer | undefined,
+    firewallPort: number,
+    sudoPassword: string,
+    closeMode: FirewallClosePortRequest["closeMode"]
+  ): FirewallClosePortRequest | undefined {
+    if (
+      !server ||
+      server.connectionMode !== "jumpSsh" ||
+      !server.haproxyHost ||
+      !server.haproxyUser ||
+      !sudoPassword ||
+      !firewallPort
+    ) {
+      return undefined;
+    }
+
+    return {
+      host: server.haproxyHost,
+      port: server.haproxyPort ?? 22,
+      username: server.haproxyUser,
+      authMethod: server.haproxyAuthMethod ?? "password",
+      password: (server.haproxyAuthMethod ?? "password") === "password" ? sudoPassword : undefined,
+      keyPath: (server.haproxyAuthMethod ?? "password") === "key" ? server.haproxyKeyPath : undefined,
       expectedOs: server.osType,
       sudoPassword,
       protocol: "tcp",
@@ -836,19 +1077,24 @@ export function ServerManagementPage() {
     return undefined;
   }
 
-  function buildAgentBaseUrl(form: ServerRegistrationForm) {
-    if (form.targetType === "local") {
-      return form.agentBaseUrl || `http://127.0.0.1:${AGENT_PORT}`;
-    }
-
-    return form.sshHost ? `http://${form.sshHost}:${AGENT_PORT}` : "";
+  function handleRegistrationFormChange(nextForm: ServerRegistrationForm) {
+    setRegistrationForm(normalizeRegistrationForm(nextForm));
   }
 
-  function handleRegistrationFormChange(nextForm: ServerRegistrationForm) {
-    setRegistrationForm({
-      ...nextForm,
-      agentBaseUrl: buildAgentBaseUrl(nextForm)
-    });
+  function ensureRemoteAgentToken(form: ServerRegistrationForm) {
+    if (form.targetType === "local" || form.agentToken) {
+      return form.agentToken || undefined;
+    }
+
+    const nextToken = generateAgentToken();
+    setRegistrationForm((current) => ({ ...current, agentToken: nextToken }));
+    return nextToken;
+  }
+
+  function generateAgentToken() {
+    const bytes = new Uint8Array(32);
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
   }
 
   function buildVolumePath(gameTemplateId: string, serverName: string) {
@@ -875,82 +1121,6 @@ export function ServerManagementPage() {
     await runCreateServer(createSudoPassword);
   }
 
-  function buildServerFromRegistration(status: ManagedServer["lastAgentPrepareStatus"], message: string): ManagedServer {
-    return {
-      id: `${registrationForm.targetType}-${Date.now()}`,
-      name: registrationForm.name,
-      targetType: registrationForm.targetType,
-      osType: registrationForm.osType,
-      host:
-        registrationForm.targetType === "local"
-          ? "localhost"
-          : `${registrationForm.sshUser}@${registrationForm.sshHost}:${registrationForm.sshPort}`,
-      agentBaseUrl: buildAgentBaseUrl(registrationForm),
-      sshHost: registrationForm.sshHost || undefined,
-      sshPort: registrationForm.targetType === "local" ? undefined : registrationForm.sshPort,
-      sshUser: registrationForm.sshUser || undefined,
-      sshAuthMethod: registrationForm.targetType === "local" ? undefined : registrationForm.sshAuthMethod,
-      sshKeyPath: registrationForm.sshKeyPath || undefined,
-      agentToken: registrationForm.agentToken || undefined,
-      lastAgentPrepareStatus: status,
-      lastAgentPrepareMessage: message,
-      status: status === "ready" ? "connected" : "setupRequired",
-      agentStatus: status === "ready" ? "connected" : status === "agentApiBlocked" ? "offline" : "notInstalled",
-      dockerStatus: status === "needsDocker" ? "needsSetup" : "ready"
-    };
-  }
-
-  function buildCreateReadiness(): ServerCreateReadiness {
-    const selectedServer = Boolean(activeServer);
-    const agentChecked = Boolean(dockerStatus?.available);
-    const dockerReady = dockerStatus?.mode === "cli";
-    const agentVersionReady = isAgentVersionCurrent;
-    const hasServerName = createForm.serverName.trim().length > 0;
-    const validPorts = createForm.internalPort > 0 && createForm.externalPort > 0;
-    const eulaAccepted = createForm.eulaAccepted;
-    const targetReady = activeServer?.targetType === "local" || activeServer?.agentStatus === "connected";
-
-    const items = [
-      { label: "서버 선택", ok: selectedServer },
-      { label: "Agent 상태 확인", ok: agentChecked },
-      { label: `Agent 버전 ${EXPECTED_AGENT_VERSION}`, ok: agentVersionReady },
-      { label: "실제 Docker mode", ok: dockerReady },
-      { label: "원격/클라우드 Agent 연결", ok: Boolean(targetReady) },
-      { label: "서버 이름 입력", ok: hasServerName },
-      { label: "포트 입력", ok: validPorts },
-      { label: "Minecraft EULA 동의", ok: eulaAccepted }
-    ];
-
-    const canCreate =
-      selectedServer && agentChecked && agentVersionReady && dockerReady && hasServerName && validPorts && eulaAccepted && Boolean(targetReady);
-
-    if (!selectedServer) {
-      return { canCreate: false, items, message: "서버를 먼저 선택하세요." };
-    }
-
-    if (!agentChecked) {
-      return { canCreate: false, items, message: "Agent 상태 확인을 먼저 실행하세요." };
-    }
-
-    if (!agentVersionReady) {
-      return { canCreate: false, items, message: "Agent 버전이 다릅니다. Agent 설치/업데이트를 실행하세요." };
-    }
-
-    if (!dockerReady) {
-      return { canCreate: false, items, message: "실제 Docker CLI mode가 확인되어야 Minecraft 서버를 생성할 수 있습니다." };
-    }
-
-    if (!targetReady) {
-      return { canCreate: false, items, message: "원격/클라우드 서버는 Agent 준비 또는 Agent 확인이 필요합니다." };
-    }
-
-    if (!hasServerName || !validPorts || !eulaAccepted) {
-      return { canCreate: false, items, message: "서버 이름, 포트, EULA 동의를 확인하세요." };
-    }
-
-    return { canCreate, items, message: "서버 생성을 진행할 수 있습니다." };
-  }
-
   function updateServerAfterContainerCreate(serverId: string) {
     setManagedServers((current) =>
       current.map((server) =>
@@ -964,14 +1134,6 @@ export function ServerManagementPage() {
     );
   }
 
-  function dockerMessage(issue: DockerIssue) {
-    if (issue === "none") return "준비됨";
-    if (issue === "notInstalled") return "미설치";
-    if (issue === "daemonStopped") return "daemon 미실행";
-    if (issue === "permissionDenied") return "권한 부족";
-    return "확인 필요";
-  }
-
   function upsertDiagnosticServer(status: ManagedServer["lastAgentPrepareStatus"], message: string) {
     let targetId = "";
     setManagedServers((current) => {
@@ -982,7 +1144,7 @@ export function ServerManagementPage() {
       );
 
       if (!existing) {
-        const nextServer = buildServerFromRegistration(status, message);
+        const nextServer = createServerFromRegistration(registrationForm, status, message);
         targetId = nextServer.id;
         return [...current, nextServer];
       }
@@ -1006,7 +1168,7 @@ export function ServerManagementPage() {
     }
   }
 
-  function upsertPreparedServer(ready: boolean, agentApiReachable: boolean) {
+  function upsertPreparedServer(ready: boolean, agentApiReachable: boolean, agentToken = registrationForm.agentToken || undefined) {
     const status: ManagedServer["lastAgentPrepareStatus"] = ready ? "ready" : agentApiReachable ? "failed" : "agentApiBlocked";
     const message = ready ? "Agent 준비 완료" : agentApiReachable ? "Agent 준비 확인 필요" : "Agent API 접근 불가";
     let targetId = "";
@@ -1019,7 +1181,7 @@ export function ServerManagementPage() {
       );
 
       if (!existing) {
-        const nextServer = buildServerFromRegistration(status, message);
+        const nextServer = createServerFromRegistration(registrationForm, status, message, agentToken);
         targetId = nextServer.id;
         return [...current, nextServer];
       }
@@ -1031,6 +1193,7 @@ export function ServerManagementPage() {
               ...server,
               lastAgentPrepareStatus: status,
               lastAgentPrepareMessage: message,
+              agentToken,
               status: ready ? "connected" : "setupRequired",
               agentStatus: ready ? "connected" : agentApiReachable ? "notInstalled" : "offline",
               dockerStatus: ready ? "ready" : server.dockerStatus
@@ -1043,31 +1206,7 @@ export function ServerManagementPage() {
       setActiveServerId(targetId);
     }
 
-    return true;
-  }
-
-  async function handleCheckServer(serverId: string) {
-    setActiveServerId(serverId);
-    const server = managedServers.find((item) => item.id === serverId);
-    if (!server) {
-      return;
-    }
-
-    try {
-      const status = await getDockerStatus(server.agentBaseUrl, server.agentToken);
-      const managedContainers = await listManagedContainers(server.agentBaseUrl, server.agentToken);
-      setDockerStatus(status);
-      setContainers(managedContainers);
-      updateServerStatus(server.id, status, true);
-      setNoticeKind(status.mode === "cli" ? "success" : "warning");
-      setMessage(`${server.name} Agent 확인 완료: ${status.mode} mode, 컨테이너 ${managedContainers.length}개`);
-    } catch (error) {
-      setDockerStatus(undefined);
-      setContainers([]);
-      updateServerOffline(server.id);
-      setNoticeKind("error");
-      setMessage(error instanceof Error ? error.message : "Agent 상태 확인 실패");
-    }
+    return targetId;
   }
 
   function navigateToServerDetail(serverId: string) {
@@ -1099,6 +1238,8 @@ export function ServerManagementPage() {
         ...current,
       name: server.name,
       targetType: server.targetType,
+      connectionMode: server.connectionMode ?? "directSsh",
+      agentAccessMode: server.agentAccessMode ?? "direct",
       osType: server.osType,
       sshHost: server.sshHost ?? "",
       sshPort: server.sshPort ?? 22,
@@ -1106,7 +1247,21 @@ export function ServerManagementPage() {
       sshAuthMethod: server.sshAuthMethod ?? "password",
       sshKeyPath: server.sshKeyPath ?? "",
       sshPassword: "",
-        agentBaseUrl: server.sshHost ? `http://${server.sshHost}:${AGENT_PORT}` : server.agentBaseUrl,
+      jumpHost: server.jumpHost ?? "",
+      jumpPort: server.jumpPort ?? 22,
+      jumpUser: server.jumpUser ?? "",
+      jumpAuthMethod: server.jumpAuthMethod ?? "key",
+      jumpKeyPath: server.jumpKeyPath ?? "",
+      jumpPassword: "",
+      haproxyHost: server.haproxyHost ?? server.jumpHost ?? "",
+      haproxyPort: server.haproxyPort ?? server.jumpPort ?? 22,
+      haproxyUser: server.haproxyUser ?? server.jumpUser ?? "",
+      haproxyAuthMethod: server.haproxyAuthMethod ?? server.jumpAuthMethod ?? "key",
+      haproxyKeyPath: server.haproxyKeyPath ?? server.jumpKeyPath ?? "",
+      haproxyPassword: "",
+      haproxyAllowedCidrs: server.haproxyAllowedCidrs ?? "",
+      haproxyAgentProxyPort: server.haproxyAgentProxyPort ?? AGENT_PORT,
+      agentBaseUrl: server.agentBaseUrl,
       agentToken: server.agentToken ?? "",
       agentDownloadUrl: current.agentDownloadUrl
       };
@@ -1115,6 +1270,29 @@ export function ServerManagementPage() {
   }
 
   function handleDeleteServer(serverId: string) {
+    const server = managedServers.find((item) => item.id === serverId);
+    if (!server) {
+      setNoticeKind("error");
+      setMessage("삭제할 서버를 찾을 수 없습니다.");
+      return;
+    }
+
+    if (server.targetType !== "local") {
+      setServerDeleteTarget({
+        server,
+        deleteRemoteAgent: true,
+        closeAgentFirewallPort: true,
+        sshPassword: "",
+        haproxyPassword: "",
+        confirmation: ""
+      });
+      return;
+    }
+
+    deleteStoredServer(serverId);
+  }
+
+  function deleteStoredServer(serverId: string) {
     const server = managedServers.find((item) => item.id === serverId);
     const nextServers = managedServers.filter((item) => item.id !== serverId);
     setManagedServers(nextServers);
@@ -1132,6 +1310,113 @@ export function ServerManagementPage() {
 
     setNoticeKind("success");
     setMessage(server ? `${server.name} 삭제됨` : "서버 삭제됨");
+  }
+
+  async function handleConfirmDeleteServer() {
+    if (!serverDeleteTarget) {
+      return;
+    }
+
+    if (serverDeleteTarget.confirmation !== serverDeleteTarget.server.name) {
+      setNoticeKind("error");
+      setMessage("서버 삭제를 진행하려면 서버 이름을 정확히 입력해야 합니다.");
+      return;
+    }
+
+    if (!serverDeleteTarget.deleteRemoteAgent) {
+      deleteStoredServer(serverDeleteTarget.server.id);
+      setServerDeleteTarget(undefined);
+      return;
+    }
+
+    const server = serverDeleteTarget.server;
+    if (!server.sshHost || !server.sshUser || !server.sshPort || !server.sshAuthMethod) {
+      setNoticeKind("error");
+      setMessage("원격 Agent 삭제에는 저장된 SSH 정보가 필요합니다.");
+      return;
+    }
+
+    if (server.sshAuthMethod === "password" && !serverDeleteTarget.sshPassword) {
+      setNoticeKind("error");
+      setMessage("원격 Agent 삭제를 위해 SSH 비밀번호를 입력하세요.");
+      return;
+    }
+
+    if (
+      server.connectionMode === "jumpSsh" &&
+      server.agentAccessMode === "haproxy" &&
+      (server.haproxyAuthMethod ?? "key") === "password" &&
+      !serverDeleteTarget.haproxyPassword
+    ) {
+      setNoticeKind("error");
+      setMessage("HAProxy 경유 서버 정리를 위해 경유 서버 SSH 비밀번호를 입력하세요.");
+      return;
+    }
+
+    try {
+      if (server.connectionMode === "jumpSsh" && server.agentAccessMode === "haproxy" && server.haproxyHost && server.haproxyUser) {
+        await removeRemoteHaproxyRoutes({
+          host: server.haproxyHost,
+          port: server.haproxyPort ?? 22,
+          username: server.haproxyUser,
+          authMethod: server.haproxyAuthMethod ?? "key",
+          password: (server.haproxyAuthMethod ?? "key") === "password" ? serverDeleteTarget.haproxyPassword : undefined,
+          keyPath: (server.haproxyAuthMethod ?? "key") === "key" ? server.haproxyKeyPath : undefined,
+          sudoPassword: (server.haproxyAuthMethod ?? "key") === "password" ? serverDeleteTarget.haproxyPassword : undefined,
+          expectedOs: server.osType,
+          serverId: buildProxyServerId(server),
+          targetHosts: server.sshHost ? [server.sshHost] : undefined,
+          closePorts: [
+            {
+              port: server.haproxyAgentProxyPort ?? AGENT_PORT,
+              protocol: "tcp",
+              allowedCidrs: server.haproxyAllowedCidrs
+            }
+          ]
+        });
+      }
+
+      const result = await removeRemoteAgent({
+        host: server.sshHost,
+        port: server.sshPort,
+        username: server.sshUser,
+        authMethod: server.sshAuthMethod,
+        password: server.sshAuthMethod === "password" ? serverDeleteTarget.sshPassword : undefined,
+        keyPath: server.sshAuthMethod === "key" ? server.sshKeyPath : undefined,
+        expectedOs: server.osType,
+        closeAgentFirewallPort: serverDeleteTarget.closeAgentFirewallPort
+      });
+
+      if (!result.removed) {
+        setServerDeleteTarget({ ...serverDeleteTarget, lastError: "원격 Agent 파일 또는 서비스가 남아 있습니다." });
+        setNoticeKind("error");
+        setMessage("원격 Agent 정리가 완료되지 않아 앱 등록 정보를 삭제하지 않았습니다.");
+        return;
+      }
+
+      deleteStoredServer(server.id);
+      setServerDeleteTarget(undefined);
+      setNoticeKind("success");
+      setMessage(
+        result.firewallClosed
+          ? `${server.name} Agent와 18080 방화벽 규칙을 정리하고 등록 정보를 삭제했습니다.`
+          : `${server.name} Agent를 정리하고 등록 정보를 삭제했습니다. 외부 방화벽의 18080 규칙은 별도로 확인하세요.`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "원격 Agent 삭제 실패";
+      setServerDeleteTarget({ ...serverDeleteTarget, lastError: message });
+      setNoticeKind("error");
+      setMessage("원격 Agent 정리가 실패해 앱 등록 정보를 삭제하지 않았습니다.");
+    }
+  }
+
+  function isLoopbackAgentUrl(agentBaseUrl: string) {
+    try {
+      const url = new URL(agentBaseUrl);
+      return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+    } catch {
+      return false;
+    }
   }
 
   function updateServerStatus(serverId: string, status: DockerStatusResponse, isConnected: boolean) {
@@ -1171,19 +1456,19 @@ export function ServerManagementPage() {
         actionLabel="서버 추가"
         description={
           isServerDetailRoute
-            ? "선택한 서버 안에서 Agent, Docker, 게임 서버를 관리합니다."
-            : "먼저 서버를 선택하고, 들어가기 버튼으로 서버 관리 화면에 접근합니다."
+            ? "선택한 서버에서 게임 서버를 시작, 중지, 삭제할 수 있습니다."
+            : "등록된 서버를 선택하고 한단에서 게임 서버를 관리할 수 있습니다."
         }
         onAction={() => setServerRegistrationOpen(true)}
-        title={isServerDetailRoute && activeServer ? activeServer.name : "서버 선택"}
+        title={isServerDetailRoute && activeServer ? activeServer.name : "내 서버"}
       />
 
       {!isServerDetailRoute && managedServers.length === 0 ? (
         <article className="panel emptyStatePanel">
-          <h2>등록된 서버가 없습니다.</h2>
-          <p>처음 실행했다면 서버를 먼저 추가하세요. 지금 PC, SSH 서버, 클라우드 서버 중 하나를 등록할 수 있습니다.</p>
+          <h2>아직 등록된 서버가 없어요</h2>
+          <p>서버를 등록하면 버튼 클릭 만으로 게임 서버를 시작하고 관리할 수 있습니다. 지금 PC, 클라우드 서버 등 어떤 환경이든 쉽게 연결할 수 있습니다.</p>
           <button className="primaryButton" onClick={() => setServerRegistrationOpen(true)} type="button">
-            서버 생성
+            첫 번째 서버 추가하기
           </button>
         </article>
       ) : null}
@@ -1194,7 +1479,6 @@ export function ServerManagementPage() {
             <ServerCard
               isSelected={server.id === activeServerId}
               key={server.id}
-              onCheck={handleCheckServer}
               onDelete={handleDeleteServer}
               onSelect={handleSelectServer}
               server={server}
@@ -1202,63 +1486,28 @@ export function ServerManagementPage() {
           ))}
         </section>
       ) : null}
-
       {isServerDetailRoute && activeServer ? (
-        <>
-          <article className="contextPanel">
-            <span>선택된 서버</span>
-            <strong>{activeServer.name}</strong>
-            <code>{activeServer.agentBaseUrl}</code>
-            <button className="secondaryButton compactButton" onClick={navigateToServerList} type="button">
-              목록으로
-            </button>
-          </article>
-
-          <section className="panelGrid">
-            <AgentStatusPanel message={message} status={dockerStatus} />
-            <article className="panel">
-              <div className="panelHeader">
-                <h2>서버 준비</h2>
-              </div>
-              <div className="formActions">
-                <button className="secondaryButton fullWidthButton" onClick={handleCheckAgent} type="button">
-                  Agent 상태 확인
-                </button>
-                {activeServer.targetType !== "local" ? (
-                  <>
-                    <button className="secondaryButton fullWidthButton" onClick={handleTestSSHInput} type="button">
-                      SSH 확인
-                    </button>
-                    <button className="primaryButton fullWidthButton" onClick={() => handlePrepareAgent()} type="button">
-                      Agent 설치
-                    </button>
-                    <button className="secondaryButton fullWidthButton" onClick={handleRequestAgentUpdate} type="button">
-                      Agent 업데이트
-                    </button>
-                    <button
-                      className={pendingFirewallOpen ? "secondaryButton fullWidthButton warningButton" : "secondaryButton fullWidthButton"}
-                      onClick={handleOpenFirewallPort}
-                      type="button"
-                    >
-                      {pendingFirewallOpen ? "sudo 허용 후 Agent 포트 열기" : "Agent 포트 개방"}
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </article>
-          </section>
-
-          <ServerCreateReadinessPanel readiness={createReadiness} />
-
-          <ContainerTable
-            containers={containers}
-            onAction={handleContainerAction}
-            onAddContainer={() => setGameCreateOpen(true)}
-            onRefreshContainers={refreshContainers}
-            onRequestAction={handleRequestContainerAction}
-            pendingAction={pendingAction}
-          />
-        </>
+        <ServerDetailView
+          activeServer={activeServer}
+          containers={containers}
+          createReadiness={createReadiness}
+          dockerStatus={dockerStatus}
+          isServerDetailRoute={isServerDetailRoute}
+          message={message}
+          pendingAction={pendingAction}
+          pendingFirewallOpen={pendingFirewallOpen}
+          shouldWarnAgentExposure={shouldWarnAgentExposure}
+          onBackToList={navigateToServerList}
+          onCheckAgent={handleCheckAgent}
+          onOpenFirewallPort={handleOpenFirewallPort}
+          onOpenGameCreate={() => setGameCreateOpen(true)}
+          onOpenConsole={setConsoleContainer}
+          onRefreshContainers={refreshContainers}
+          onRequestAgentUpdate={handleRequestAgentUpdate}
+          onRequestContainerAction={handleRequestContainerAction}
+          onRunContainerAction={handleContainerAction}
+          onTestSSH={handleTestSSHInput}
+        />
       ) : null}
 
       {gameCreateOpen ? (
@@ -1272,47 +1521,26 @@ export function ServerManagementPage() {
         </AppModal>
       ) : null}
 
-      {createConfirmModalOpen ? (
-        <AppModal onClose={() => setCreateConfirmModalOpen(false)} title="게임 서버 생성">
-          <p className="helperText">
-            Docker 컨테이너를 만들고 외부 공개 포트 {createForm.externalPort}/tcp를 엽니다. 원격 서버에서는 sudo 권한이 필요하며
-            입력한 SSH 비밀번호는 이번 작업에만 사용하고 저장하지 않습니다.
-          </p>
-          <dl className="detailList">
-            <div>
-              <dt>게임</dt>
-              <dd>{createForm.gameTemplateId === "minecraft-java" ? "Minecraft Java" : createForm.gameTemplateId}</dd>
-            </div>
-            <div>
-              <dt>포트</dt>
-              <dd>{createForm.externalPort} → {createForm.internalPort}</dd>
-            </div>
-            <div>
-              <dt>볼륨</dt>
-              <dd>{buildVolumePath(createForm.gameTemplateId, createForm.serverName)}</dd>
-            </div>
-          </dl>
-          {activeServer?.targetType !== "local" ? (
-            <label className="fieldGroup">
-              <span>SSH password</span>
-              <input
-                autoFocus
-                className="textInput"
-                onChange={(event) => setCreateSudoPassword(event.target.value)}
-                type="password"
-                value={createSudoPassword}
-              />
-            </label>
-          ) : null}
-          <div className="modalActions">
-            <button className="secondaryButton" onClick={() => setCreateConfirmModalOpen(false)} type="button">
-              취소
-            </button>
-            <button className="primaryButton" onClick={handleConfirmCreateServer} type="button">
-              생성
-            </button>
-          </div>
+      {consoleContainer && activeServer ? (
+        <AppModal onClose={() => setConsoleContainer(undefined)} title={`${consoleContainer.name} 콘솔`}>
+          <ContainerConsolePanel
+            agentBaseUrl={activeServer.agentBaseUrl}
+            agentToken={activeServer.agentToken}
+            container={consoleContainer}
+            serverName={activeServer.name}
+          />
         </AppModal>
+      ) : null}
+      {createConfirmModalOpen ? (
+        <CreateServerConfirmModal
+          activeServer={activeServer}
+          form={createForm}
+          sudoPassword={createSudoPassword}
+          volumePath={buildVolumePath(createForm.gameTemplateId, createForm.serverName)}
+          onChangeSudoPassword={setCreateSudoPassword}
+          onClose={() => setCreateConfirmModalOpen(false)}
+          onConfirm={handleConfirmCreateServer}
+        />
       ) : null}
 
       {pendingFirewallOpen ? (
@@ -1330,6 +1558,7 @@ export function ServerManagementPage() {
           <ServerRegistrationPanel
             form={registrationForm}
             isFirewallConfirming={pendingFirewallOpen}
+            pendingAction={pendingRegistrationAction}
             onChange={handleRegistrationFormChange}
             onOpenFirewallPort={handleOpenFirewallPort}
             onPrepareAgent={handlePrepareAgent}
@@ -1340,139 +1569,58 @@ export function ServerManagementPage() {
         </AppModal>
       ) : null}
 
-      {agentUpdateModalOpen ? (
-        <AppModal onClose={() => setAgentUpdateModalOpen(false)} title="Agent 업데이트">
+      {haproxyInstallModalOpen ? (
+        <AppModal onClose={() => setHaproxyInstallModalOpen(false)} title="HAProxy 설치">
           <p className="helperText">
-            저장된 SSH 서버에 접속해 기존 Agent를 중지하고 새 Agent로 교체합니다. 게임 서버 정보 파일은 유지됩니다.
+            외부망 경유 노드에서 HAProxy를 찾지 못했습니다. OS와 패키지 매니저를 감지한 뒤 HAProxy 설치를 시도합니다.
           </p>
           <label className="fieldGroup">
-            <span>SSH password</span>
+            <span>sudo password</span>
             <input
               autoFocus
               className="textInput"
-              onChange={(event) => setAgentUpdatePassword(event.target.value)}
+              onChange={(event) => setHaproxyInstallPassword(event.target.value)}
               type="password"
-              value={agentUpdatePassword}
+              value={haproxyInstallPassword}
             />
           </label>
           <div className="modalActions">
-            <button className="secondaryButton" onClick={() => setAgentUpdateModalOpen(false)} type="button">
+            <button className="secondaryButton" onClick={() => setHaproxyInstallModalOpen(false)} type="button">
               취소
             </button>
-            <button className="primaryButton" onClick={handleConfirmAgentUpdate} type="button">
-              업데이트
+            <button className="primaryButton" disabled={pendingRegistrationAction === "ssh"} onClick={handleConfirmHaproxyInstall} type="button">
+              {pendingRegistrationAction === "ssh" ? "설치 중" : "설치"}
             </button>
           </div>
         </AppModal>
       ) : null}
+      {agentUpdateModalOpen ? (
+        <AgentUpdateModal
+          password={agentUpdatePassword}
+          onChangePassword={setAgentUpdatePassword}
+          onClose={() => setAgentUpdateModalOpen(false)}
+          onConfirm={handleConfirmAgentUpdate}
+        />
+      ) : null}
 
       {dockerGuide ? <DockerInstallGuide issue={dockerGuide.issue} osType={dockerGuide.osType} /> : null}
-
+      {serverDeleteTarget ? (
+        <ServerDeleteModal
+          target={serverDeleteTarget}
+          onChange={setServerDeleteTarget}
+          onClose={() => setServerDeleteTarget(undefined)}
+          onConfirm={handleConfirmDeleteServer}
+        />
+      ) : null}
       {deleteTarget ? (
-        <AppModal
+        <ContainerDeleteModal
+          target={deleteTarget}
+          onChange={setDeleteTarget}
           onClose={() => setDeleteTarget(undefined)}
-          title={deleteTarget.step === "scope" ? "게임 서버 삭제" : "방화벽 포트 정리"}
-        >
-          {deleteTarget.step === "scope" ? (
-            <>
-              <p className="helperText">
-                먼저 삭제 범위를 선택하세요. 컨테이너만 삭제하면 맵 데이터와 설정 파일은 서버 볼륨에 남습니다.
-              </p>
-              <label className="checkRow">
-                <input
-                  checked={!deleteTarget.deleteData}
-                  onChange={() => setDeleteTarget({ ...deleteTarget, deleteData: false, confirmation: "" })}
-                  type="radio"
-                />
-                컨테이너만 삭제하고 맵 데이터는 유지
-              </label>
-              <label className="checkRow">
-                <input
-                  checked={deleteTarget.deleteData}
-                  onChange={() => setDeleteTarget({ ...deleteTarget, deleteData: true })}
-                  type="radio"
-                />
-                전체 데이터 삭제
-              </label>
-              {deleteTarget.deleteData ? (
-                <div className="dangerChoice">
-                  <strong>맵 데이터, 설정, 로그가 모두 사라집니다.</strong>
-                  <span>계속하려면 서버 이름 `{deleteTarget.container.name}`을 그대로 입력하세요.</span>
-                  <input
-                    className="textInput"
-                    onChange={(event) => setDeleteTarget({ ...deleteTarget, confirmation: event.target.value })}
-                    value={deleteTarget.confirmation}
-                  />
-                </div>
-              ) : null}
-              <div className="modalActions">
-                <button className="secondaryButton" onClick={() => setDeleteTarget(undefined)} type="button">
-                  취소
-                </button>
-                <button className="primaryButton" onClick={handleNextDeleteStep} type="button">
-                  다음
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="helperText">
-                마지막으로 게임 포트 방화벽 규칙을 어떻게 처리할지 선택하세요. 방화벽 변경에는 SSH 비밀번호와 sudo 권한이 필요할 수 있습니다.
-              </p>
-              <div className="dangerChoice">
-                <strong>방화벽 포트 정리</strong>
-                <label className="checkRow">
-                  <input
-                    checked={deleteTarget.firewallMode === "keep"}
-                    onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "keep", firewallPassword: "" })}
-                    type="radio"
-                  />
-                  방화벽은 그대로 둠
-                </label>
-                <label className="checkRow">
-                  <input
-                    checked={deleteTarget.firewallMode === "deleteAllow"}
-                    onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "deleteAllow" })}
-                    type="radio"
-                  />
-                  열어둔 허용 규칙 삭제
-                </label>
-                <label className="checkRow">
-                  <input
-                    checked={deleteTarget.firewallMode === "deny"}
-                    onChange={() => setDeleteTarget({ ...deleteTarget, firewallMode: "deny" })}
-                    type="radio"
-                  />
-                  차단 규칙 추가
-                </label>
-                {deleteTarget.firewallMode !== "keep" ? (
-                  <label className="fieldGroup">
-                    <span>SSH password</span>
-                    <input
-                      autoFocus
-                      className="textInput"
-                      onChange={(event) => setDeleteTarget({ ...deleteTarget, firewallPassword: event.target.value })}
-                      type="password"
-                      value={deleteTarget.firewallPassword}
-                    />
-                  </label>
-                ) : null}
-              </div>
-              <div className="modalActions">
-                <button
-                  className="secondaryButton"
-                  onClick={() => setDeleteTarget({ ...deleteTarget, step: "scope" })}
-                  type="button"
-                >
-                  이전
-                </button>
-                <button className="secondaryButton warningButton" onClick={handleConfirmDeleteContainer} type="button">
-                  삭제
-                </button>
-              </div>
-            </>
-          )}
-        </AppModal>
+          onBack={() => setDeleteTarget({ ...deleteTarget, step: "scope" })}
+          onNext={handleNextDeleteStep}
+          onConfirm={handleConfirmDeleteContainer}
+        />
       ) : null}
 
     </>

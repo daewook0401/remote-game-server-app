@@ -13,22 +13,22 @@ export function AgentStatusPanel({ message, status }: AgentStatusPanelProps) {
   return (
     <article className="panel agentStatusPanel">
       <div className="panelHeader">
-        <h2>Agent / Docker 상태</h2>
+        <h2>서버 연결 상태</h2>
         <span className={statusClassName}>
           {status?.available ? (isExpectedVersion ? status.mode : "업데이트 필요") : "확인 필요"}
         </span>
       </div>
       <dl className="detailList">
         <div>
-          <dt>Mode</dt>
+          <dt>서버 모드</dt>
           <dd>{status?.mode ?? "-"}</dd>
         </div>
         <div>
-          <dt>Message</dt>
+          <dt>상태 메시지</dt>
           <dd>{status?.message ?? message}</dd>
         </div>
         <div>
-          <dt>Version</dt>
+          <dt>버전</dt>
           <dd>{status?.agentVersion ?? "확인 불가"} / {EXPECTED_AGENT_VERSION}</dd>
         </div>
       </dl>

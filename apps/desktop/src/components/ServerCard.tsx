@@ -2,7 +2,6 @@ import type { ManagedServer } from "../types/server";
 
 interface ServerCardProps {
   isSelected: boolean;
-  onCheck: (serverId: string) => void;
   onDelete: (serverId: string) => void;
   onSelect: (serverId: string) => void;
   server: ManagedServer;
@@ -14,7 +13,7 @@ const statusLabels: Record<ManagedServer["status"], string> = {
   offline: "오프라인"
 };
 
-export function ServerCard({ isSelected, onCheck, onDelete, onSelect, server }: ServerCardProps) {
+export function ServerCard({ isSelected, onDelete, onSelect, server }: ServerCardProps) {
   return (
     <article className={isSelected ? "panel serverCard selected" : "panel serverCard"}>
       <div className="panelHeader">
@@ -23,32 +22,25 @@ export function ServerCard({ isSelected, onCheck, onDelete, onSelect, server }: 
       </div>
       <dl className="detailList">
         <div>
-          <dt>접속 대상</dt>
+          <dt>서버 주소</dt>
           <dd>{server.host}</dd>
         </div>
         <div>
-          <dt>Agent URL</dt>
-          <dd>{server.agentBaseUrl}</dd>
-        </div>
-        <div>
-          <dt>OS</dt>
+          <dt>운영체제</dt>
           <dd>{server.osType}</dd>
         </div>
         <div>
-          <dt>Agent</dt>
+          <dt>연결 상태</dt>
           <dd>{server.agentStatus}</dd>
         </div>
         <div>
-          <dt>Docker</dt>
+          <dt>서버 엔진</dt>
           <dd>{server.dockerStatus}</dd>
         </div>
       </dl>
       <div className="cardActions">
         <button className="primaryButton compactButton" onClick={() => onSelect(server.id)} type="button">
-          들어가기
-        </button>
-        <button className="secondaryButton compactButton" onClick={() => onCheck(server.id)} type="button">
-          상태 확인
+          관리하기
         </button>
         <button className="smallButton danger" onClick={() => onDelete(server.id)} type="button">
           삭제

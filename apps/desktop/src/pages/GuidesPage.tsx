@@ -13,9 +13,9 @@ export function GuidesPage() {
     <>
       <Topbar
         actionLabel="가이드 열기"
-        description="자동 원격 수정이 어려운 영역은 사용자가 따라 할 수 있는 안내로 제공합니다."
+        description="서버 설정 중 막히는 부분은 여기서 단계별 안내를 확인하세요."
         onAction={() => undefined}
-        title="안내 가이드"
+        title="도움말"
       />
 
       <article className="panel widePanel">

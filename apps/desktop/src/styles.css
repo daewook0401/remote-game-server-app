@@ -1,8 +1,8 @@
 :root {
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #18202f;
-  background: #eef2f6;
+  color: #f0edf8;
+  background: #0d0c14;
 }
 
 * {
@@ -19,45 +19,71 @@ button {
   font: inherit;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.56;
+  opacity: 0.4;
 }
 
+/* ── Shell ── */
 .shell {
   display: grid;
-  grid-template-columns: 248px 1fr;
+  grid-template-columns: 240px 1fr;
   min-height: 100vh;
-  background: #eef2f6;
+  background: #0d0c14;
 }
 
+/* ── Sidebar ── */
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 32px;
-  padding: 24px 16px;
-  color: #f8fafc;
-  background: #18202f;
+  gap: 28px;
+  padding: 24px 12px;
+  color: #f0edf8;
+  background: #08070f;
+  border-right: 1px solid #1e1b2e;
 }
 
 .brand {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 8px;
-  font-size: 16px;
-  font-weight: 700;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 12px 8px;
+}
+
+.brandTitle {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #c084fc 0%, #7c3aed 60%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brandSub {
+  font-size: 11px;
+  color: #5f5a78;
+  font-weight: 500;
 }
 
 .brand svg,
 .navItem svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .nav {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .navItem {
@@ -65,24 +91,36 @@ button:disabled {
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 42px;
+  height: 40px;
   padding: 0 12px;
   border: 0;
-  border-radius: 6px;
-  color: #cbd5e1;
+  border-radius: 8px;
+  color: #9489c0;
   background: transparent;
   cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.15s, background 0.15s;
+}
+
+.navItem:hover {
+  color: #f0edf8;
+  background: rgba(124, 58, 237, 0.1);
 }
 
 .navItem.active {
-  color: #ffffff;
-  background: #2563eb;
+  color: #f0edf8;
+  background: rgba(124, 58, 237, 0.2);
+  box-shadow: inset 2px 0 0 #7c3aed;
 }
 
+/* ── Workspace ── */
 .workspace {
   padding: 28px 32px;
+  background: #0d0c14;
 }
 
+/* ── Topbar ── */
 .topbar {
   display: flex;
   align-items: center;
@@ -92,24 +130,36 @@ button:disabled {
 }
 
 .topbar h1 {
-  margin: 0 0 6px;
-  font-size: 28px;
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 700;
   line-height: 1.2;
+  color: #f0edf8;
 }
 
 .topbar p,
 .modeCard p {
   margin: 0;
-  color: #556173;
+  color: #9489c0;
+  font-size: 14px;
 }
 
+/* ── Buttons ── */
 .primaryButton {
-  height: 42px;
+  height: 40px;
   padding: 0 18px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   color: #ffffff;
-  background: #0f766e;
+  background: #7c3aed;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.primaryButton:not(:disabled):hover {
+  background: #6d28d9;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
 }
 
 .actionGroup {
@@ -119,20 +169,31 @@ button:disabled {
 }
 
 .secondaryButton {
-  height: 42px;
+  height: 40px;
   padding: 0 18px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  color: #334155;
-  background: #ffffff;
+  border: 1px solid #2a2640;
+  border-radius: 8px;
+  color: #d4cff0;
+  background: #1e1c2b;
+  font-weight: 500;
+  font-size: 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.secondaryButton:not(:disabled):hover,
+.smallButton:not(:disabled):hover,
+.iconButton:not(:disabled):hover {
+  border-color: #4a4568;
+  background: #252339;
 }
 
 .secondaryButton.warningButton {
-  border-color: #f59e0b;
-  color: #92400e;
-  background: #fef3c7;
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.1);
 }
 
+/* ── Mode Grid ── */
 .modeGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -142,14 +203,19 @@ button:disabled {
 
 .modeCard,
 .panel {
-  border: 1px solid #d8dee8;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid #2a2640;
+  border-radius: 10px;
+  background: #16141f;
 }
 
 .modeCard {
   min-height: 136px;
   padding: 18px;
+  transition: border-color 0.15s;
+}
+
+.modeCard:hover {
+  border-color: #4a4568;
 }
 
 .modeHeader,
@@ -164,7 +230,9 @@ button:disabled {
 .modeHeader h2,
 .panelHeader h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #f0edf8;
 }
 
 .headerActions {
@@ -176,25 +244,30 @@ button:disabled {
 }
 
 .modeHeader span {
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: 999px;
-  color: #0f766e;
-  background: #ccfbf1;
-  font-size: 12px;
+  color: #a78bfa;
+  background: rgba(124, 58, 237, 0.15);
+  font-size: 11px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
+/* ── Panel Grid ── */
 .panelGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   gap: 18px;
 }
 
+/* ── Empty State ── */
 .emptyStatePanel {
   display: grid;
   place-items: start;
-  gap: 12px;
-  min-height: 220px;
+  gap: 14px;
+  min-height: 260px;
+  padding: 36px;
 }
 
 .emptyStatePanel h2,
@@ -202,45 +275,57 @@ button:disabled {
   margin: 0;
 }
 
-.emptyStatePanel p {
-  max-width: 620px;
-  color: #556173;
+.emptyStatePanel h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f0edf8;
 }
 
+.emptyStatePanel p {
+  max-width: 540px;
+  color: #9489c0;
+  line-height: 1.65;
+  font-size: 14px;
+}
+
+/* ── Wide Panel ── */
 .widePanel {
   margin-top: 18px;
 }
 
+/* ── Notice Bar ── */
 .noticeBar {
   margin-bottom: 18px;
   padding: 12px 14px;
-  border-radius: 6px;
+  border-radius: 8px;
+  font-size: 14px;
 }
 
 .noticeBar.info {
-  border: 1px solid #bfdbfe;
-  color: #1e3a8a;
-  background: #dbeafe;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  color: #93c5fd;
+  background: rgba(96, 165, 250, 0.08);
 }
 
 .noticeBar.success {
-  border: 1px solid #99f6e4;
-  color: #115e59;
-  background: #ccfbf1;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.08);
 }
 
 .noticeBar.warning {
-  border: 1px solid #fde68a;
-  color: #92400e;
-  background: #fef3c7;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.08);
 }
 
 .noticeBar.error {
-  border: 1px solid #fecaca;
-  color: #991b1b;
-  background: #fee2e2;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.08);
 }
 
+/* ── Toast ── */
 .toastViewport {
   position: fixed;
   top: 18px;
@@ -258,11 +343,12 @@ button:disabled {
   align-items: start;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 8px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
-  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  background: #1e1c2b;
   animation: toastSlide 260ms ease-out;
   pointer-events: auto;
+  font-size: 13px;
 }
 
 .toastCloseButton {
@@ -281,27 +367,27 @@ button:disabled {
 }
 
 .toastCloseButton:hover {
-  background: rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .toastMessage.info {
-  border: 1px solid #bfdbfe;
-  color: #1e3a8a;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  color: #93c5fd;
 }
 
 .toastMessage.success {
-  border: 1px solid #99f6e4;
-  color: #115e59;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
 }
 
 .toastMessage.warning {
-  border: 1px solid #fde68a;
-  color: #92400e;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
 }
 
 .toastMessage.error {
-  border: 1px solid #fecaca;
-  color: #991b1b;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
 }
 
 @keyframes toastSlide {
@@ -316,23 +402,28 @@ button:disabled {
   }
 }
 
+/* ── Modal ── */
 .modalOverlay {
   position: fixed;
   inset: 0;
   z-index: 60;
   display: grid;
-  place-items: center;
+  align-items: start;
+  justify-items: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.42);
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.7);
 }
 
 .appModal {
   width: min(860px, 100%);
-  padding: 18px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid #2a2640;
+  border-radius: 12px;
+  background: #16141f;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
 }
 
 .modalHeader {
@@ -340,35 +431,38 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .modalHeader h2 {
   margin: 0;
   font-size: 18px;
+  font-weight: 700;
+  color: #f0edf8;
 }
 
 .modalActions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 18px;
 }
 
 .panel {
   padding: 18px;
 }
 
+/* ── Icon Button ── */
 .iconButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 34px;
   height: 34px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  color: #334155;
-  background: #ffffff;
+  border: 1px solid #2a2640;
+  border-radius: 8px;
+  color: #9489c0;
+  background: #1e1c2b;
 }
 
 .iconButton svg,
@@ -378,21 +472,24 @@ button:disabled {
 }
 
 .statusIcon {
-  color: #0f766e;
+  color: #22c55e;
 }
 
+/* ── Address Box ── */
 .addressBox {
-  padding: 18px;
-  border-radius: 6px;
-  color: #dbeafe;
-  background: #18202f;
+  padding: 16px;
+  border-radius: 8px;
+  color: #c4b5fd;
+  background: #06050d;
+  border: 1px solid #2a2640;
   font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 22px;
+  font-size: 20px;
 }
 
+/* ── Status List ── */
 .statusList {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -400,17 +497,21 @@ button:disabled {
 
 .statusList li {
   padding: 10px 12px;
-  border-radius: 6px;
-  color: #334155;
-  background: #f1f5f9;
+  border-radius: 8px;
+  color: #d4cff0;
+  background: #1e1c2b;
+  font-size: 14px;
 }
 
+/* ── Readiness Panel ── */
 .readinessPanel {
-  border-color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.04);
 }
 
 .readinessPanel.ready {
-  border-color: #99f6e4;
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.04);
 }
 
 .readinessList {
@@ -425,29 +526,38 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #334155;
+  color: #d4cff0;
+  font-size: 14px;
 }
 
 .readinessDot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
   background: #f59e0b;
+  flex-shrink: 0;
 }
 
 .readinessDot.ok {
-  background: #0f766e;
+  background: #22c55e;
 }
 
+/* ── Server / Template Cards ── */
 .serverCard,
 .templateCard,
 .agentStatusPanel {
   min-height: 174px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.serverCard:hover,
+.templateCard:hover {
+  border-color: #4a4568;
 }
 
 .serverCard.selected {
-  border-color: #0f766e;
-  box-shadow: inset 0 0 0 1px #0f766e;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 1px #7c3aed, inset 0 0 20px rgba(124, 58, 237, 0.06);
 }
 
 .cardActions {
@@ -458,24 +568,28 @@ button:disabled {
 .compactButton {
   height: 34px;
   padding: 0 12px;
+  font-size: 13px;
 }
 
+/* ── Context Panel ── */
 .contextPanel {
   display: grid;
   grid-template-columns: auto minmax(0, 220px) minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   margin-bottom: 18px;
-  padding: 12px 14px;
-  border: 1px solid #d8dee8;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 12px 16px;
+  border: 1px solid #2a2640;
+  border-radius: 10px;
+  background: #16141f;
 }
 
 .contextPanel span {
-  color: #64748b;
-  font-size: 13px;
+  color: #5f5a78;
+  font-size: 11px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .contextPanel strong,
@@ -483,63 +597,81 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-.contextPanel code {
-  padding: 6px 8px;
-  border-radius: 6px;
-  color: #334155;
-  background: #f1f5f9;
+.contextPanel strong {
+  color: #f0edf8;
+  font-weight: 600;
 }
 
+.contextPanel code {
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: #c4b5fd;
+  background: rgba(124, 58, 237, 0.12);
+  font-size: 13px;
+}
+
+/* ── State Badges ── */
 .stateBadge {
-  padding: 4px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .stateBadge.connected {
-  color: #0f766e;
-  background: #ccfbf1;
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.25);
 }
 
 .stateBadge.setupRequired {
-  color: #92400e;
-  background: #fef3c7;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
 .stateBadge.offline {
-  color: #991b1b;
-  background: #fee2e2;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
+/* ── Detail List ── */
 .detailList {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin: 0 0 16px;
 }
 
 .detailList div {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px;
 }
 
 .detailList dt {
-  color: #64748b;
+  color: #5f5a78;
+  font-size: 13px;
 }
 
 .detailList dd {
   margin: 0;
-  color: #18202f;
+  color: #d4cff0;
   overflow-wrap: anywhere;
-}
-
-.helperText {
-  margin: 0;
-  color: #64748b;
   font-size: 13px;
 }
 
+/* ── Helper Text ── */
+.helperText {
+  margin: 0;
+  color: #5f5a78;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ── Safety Panel ── */
 .safetyPanel {
   display: flex;
   align-items: center;
@@ -547,53 +679,60 @@ button:disabled {
   gap: 18px;
   margin: 18px 0;
   padding: 16px 18px;
-  border: 1px solid #fde68a;
-  border-radius: 8px;
-  color: #92400e;
-  background: #fef3c7;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 10px;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.06);
 }
 
 .safetyPanel.cli {
-  border-color: #99f6e4;
-  color: #115e59;
-  background: #ccfbf1;
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.06);
 }
 
 .safetyPanel h2 {
   margin: 0 0 4px;
-  font-size: 17px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .safetyPanel p {
   margin: 0;
+  font-size: 14px;
 }
 
 .safetyPanel code {
-  padding: 8px 10px;
+  padding: 6px 10px;
   border-radius: 6px;
-  color: #18202f;
-  background: rgba(255, 255, 255, 0.72);
+  color: #f0edf8;
+  background: rgba(0, 0, 0, 0.4);
   white-space: nowrap;
+  font-size: 13px;
 }
 
+/* ── Confirm Panel ── */
 .confirmPanel {
   margin: 18px 0;
   padding: 16px 18px;
-  border: 1px solid #fca5a5;
-  border-radius: 8px;
-  color: #991b1b;
-  background: #fee2e2;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 10px;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.06);
 }
 
 .confirmPanel h2 {
   margin: 0 0 6px;
-  font-size: 17px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .confirmPanel p {
   margin: 0;
+  font-size: 14px;
 }
 
+/* ── Form ── */
 .fullWidthButton {
   width: 100%;
 }
@@ -604,22 +743,30 @@ button:disabled {
   gap: 10px;
 }
 
+/* ── Data Table ── */
 .dataTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .dataTable th,
 .dataTable td {
   padding: 12px 10px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #1e1b2e;
   text-align: left;
 }
 
 .dataTable th {
-  color: #64748b;
-  font-weight: 700;
+  color: #5f5a78;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dataTable td {
+  color: #d4cff0;
 }
 
 .tableActions {
@@ -628,24 +775,28 @@ button:disabled {
 }
 
 .smallButton {
-  height: 30px;
+  height: 28px;
   padding: 0 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #2a2640;
   border-radius: 6px;
-  color: #334155;
-  background: #ffffff;
+  color: #9489c0;
+  background: #1e1c2b;
+  font-size: 12px;
 }
 
 .smallButton.danger {
-  color: #991b1b;
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .smallButton.confirm {
-  border-color: #f59e0b;
-  color: #92400e;
-  background: #fef3c7;
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.1);
 }
 
+/* ── Console ── */
 .consolePanel {
   display: grid;
   gap: 12px;
@@ -654,11 +805,13 @@ button:disabled {
 .terminalOutput {
   min-height: 340px;
   padding: 18px;
-  border-radius: 6px;
-  color: #dbeafe;
-  background: #111827;
+  border-radius: 8px;
+  color: #c4b5fd;
+  background: #06050d;
+  border: 1px solid #1e1b2e;
   font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   line-height: 1.7;
+  font-size: 13px;
 }
 
 .terminalInput {
@@ -666,9 +819,9 @@ button:disabled {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #ffffff;
+  border: 1px solid #2a2640;
+  border-radius: 8px;
+  background: #16141f;
 }
 
 .terminalInput input {
@@ -676,28 +829,46 @@ button:disabled {
   border: 0;
   outline: 0;
   font: inherit;
+  color: #f0edf8;
+  background: transparent;
 }
 
+/* ── Form Fields ── */
 .fieldLabel {
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 700;
+  color: #5f5a78;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .textInput {
   width: 100%;
   height: 38px;
   padding: 0 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  color: #18202f;
-  background: #ffffff;
+  border: 1px solid #2a2640;
+  border-radius: 8px;
+  color: #f0edf8;
+  background: #0e0c1a;
   font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.textInput:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.textInput option {
+  background: #1e1c2b;
 }
 
 .readonlyInput {
-  color: #475569;
-  background: #f1f5f9;
+  color: #5f5a78;
+  background: #0a0910;
+  cursor: default;
 }
 
 .dangerChoice {
@@ -705,10 +876,11 @@ button:disabled {
   gap: 8px;
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid #fecaca;
+  border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 8px;
-  color: #991b1b;
-  background: #fee2e2;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.06);
+  font-size: 14px;
 }
 
 .formGrid {
@@ -720,15 +892,17 @@ button:disabled {
 
 .sshGrid {
   padding-top: 14px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #1e1b2e;
 }
 
 .fieldGroup {
   display: grid;
   gap: 6px;
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 700;
+  color: #5f5a78;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .checkRow {
@@ -736,12 +910,14 @@ button:disabled {
   align-items: center;
   gap: 8px;
   margin: 6px 0 16px;
-  color: #334155;
+  color: #d4cff0;
+  font-size: 14px;
 }
 
+/* ── Guide List ── */
 .guideList {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -749,12 +925,20 @@ button:disabled {
 
 .guideList li {
   padding: 14px 16px;
-  border-radius: 6px;
-  background: #f1f5f9;
+  border-radius: 8px;
+  background: #1e1c2b;
+  border: 1px solid #2a2640;
+  color: #d4cff0;
+  font-size: 14px;
+  transition: border-color 0.15s;
+}
+
+.guideList li:hover {
+  border-color: #4a4568;
 }
 
 .guidePanel {
-  border-color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .commandList {
@@ -766,7 +950,9 @@ button:disabled {
   display: block;
   padding: 10px 12px;
   border-radius: 6px;
-  color: #dbeafe;
-  background: #111827;
+  color: #c4b5fd;
+  background: #06050d;
+  border: 1px solid #1e1b2e;
   overflow-wrap: anywhere;
+  font-size: 13px;
 }
