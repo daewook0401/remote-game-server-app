@@ -1,4 +1,5 @@
 import type { SshRequest } from "../types.js";
+import { DETECTION_SECTIONS } from "../commands/sentinels.js";
 import {
   detectOperatingSystem,
   doesOperatingSystemMatch,
@@ -15,7 +16,7 @@ import { runSshCommand } from "../ssh/sshClient.js";
 
 export async function testSSH(request: SshRequest) {
   const output = await runSshCommand(request, osDetectionCommand(request.expectedOs));
-  const detectedOs = detectOperatingSystem(extractSection(output, "OS"));
+  const detectedOs = detectOperatingSystem(extractSection(output, DETECTION_SECTIONS.os));
 
   return {
     connected: true,

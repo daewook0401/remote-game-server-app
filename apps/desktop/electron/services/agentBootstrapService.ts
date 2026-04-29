@@ -1,4 +1,5 @@
 import type { AgentPrepareRequest, AgentRemoveRequest } from "../types.js";
+import { AGENT_SENTINELS } from "../commands/sentinels.js";
 import { agentPrepareCommand, agentRemoveCommand } from "../ssh/bootstrapScripts.js";
 import { runSshCommand, runSshCommandWithInput } from "../ssh/sshClient.js";
 
@@ -9,10 +10,10 @@ export async function prepareAgent(request: AgentPrepareRequest) {
     : await runSshCommand(request, command);
 
   return {
-    installed: output.includes("AGENT_INSTALLED=true"),
-    started: output.includes("AGENT_STARTED=true"),
-    agentPortOpen: output.includes("AGENT_PORT_OPEN=true"),
-    firewallOpened: output.includes("AGENT_FIREWALL_OPENED=true"),
+    installed: output.includes(AGENT_SENTINELS.installedTrue),
+    started: output.includes(AGENT_SENTINELS.startedTrue),
+    agentPortOpen: output.includes(AGENT_SENTINELS.portOpenTrue),
+    firewallOpened: output.includes(AGENT_SENTINELS.firewallOpened),
     output
   };
 }
@@ -24,8 +25,8 @@ export async function removeAgent(request: AgentRemoveRequest) {
     : await runSshCommand(request, command);
 
   return {
-    removed: output.includes("AGENT_REMOVED=true"),
-    firewallClosed: output.includes("AGENT_FIREWALL_CLOSED=true"),
+    removed: output.includes(AGENT_SENTINELS.removedTrue),
+    firewallClosed: output.includes(AGENT_SENTINELS.firewallClosedTrue),
     output
   };
 }

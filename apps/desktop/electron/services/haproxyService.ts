@@ -1,4 +1,5 @@
 import type { HaproxyApplyRequest, HaproxyRemoveRequest, HaproxySshRequest } from "../types.js";
+import { HAPROXY_SENTINELS } from "../commands/sentinels.js";
 import { haproxyApplyCommand, haproxyInstallCommand, haproxyRemoveCommand, haproxyStatusCommand } from "../ssh/haproxyScripts.js";
 import { runSshCommand, runSshCommandWithInput } from "../ssh/sshClient.js";
 
@@ -11,7 +12,7 @@ function passwordInput(request: HaproxySshRequest) {
 }
 
 function parseUdpSupport(output: string) {
-  return /HAPROXY_UDP_SUPPORTED=true/i.test(output) || /udp-lb|udp module|enterprise|hapee/i.test(output);
+  return output.toLowerCase().includes(HAPROXY_SENTINELS.udpSupportedTrue.toLowerCase()) || /udp-lb|udp module|enterprise|hapee/i.test(output);
 }
 
 export async function checkHaproxy(request: HaproxySshRequest) {
@@ -20,7 +21,7 @@ export async function checkHaproxy(request: HaproxySshRequest) {
     : await runSshCommand(request, haproxyStatusCommand());
 
   return {
-    installed: output.includes("HAPROXY_INSTALLED=true"),
+    installed: output.includes(HAPROXY_SENTINELS.installedTrue),
     version: output.split("\n").find((line) => line.toLowerCase().includes("haproxy version")) ?? "",
     udpSupported: parseUdpSupport(output),
     output
@@ -33,7 +34,7 @@ export async function installHaproxy(request: HaproxySshRequest) {
     : await runSshCommand(request, haproxyInstallCommand(request));
 
   return {
-    installed: output.includes("HAPROXY_INSTALLED=true"),
+    installed: output.includes(HAPROXY_SENTINELS.installedTrue),
     version: output.split("\n").find((line) => line.toLowerCase().includes("haproxy version")) ?? "",
     udpSupported: parseUdpSupport(output),
     output
@@ -47,9 +48,9 @@ export async function applyHaproxy(request: HaproxyApplyRequest) {
     : await runSshCommand(request, command);
 
   return {
-    applied: output.includes("HAPROXY_APPLIED=true"),
-    firewallOpened: output.includes("HAPROXY_FIREWALL_OPENED=true"),
-    reloaded: output.includes("HAPROXY_RELOADED=true"),
+    applied: output.includes(HAPROXY_SENTINELS.applied),
+    firewallOpened: output.includes(HAPROXY_SENTINELS.firewallOpened),
+    reloaded: output.includes(HAPROXY_SENTINELS.reloadedTrue),
     udpSupported: parseUdpSupport(output),
     output
   };
@@ -62,8 +63,8 @@ export async function removeHaproxyRoutes(request: HaproxyRemoveRequest) {
     : await runSshCommand(request, command);
 
   return {
-    removed: output.includes("HAPROXY_REMOVED=true"),
-    reloaded: output.includes("HAPROXY_RELOADED=true"),
+    removed: output.includes(HAPROXY_SENTINELS.removed),
+    reloaded: output.includes(HAPROXY_SENTINELS.reloadedTrue),
     output
   };
 }

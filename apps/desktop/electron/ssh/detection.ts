@@ -1,54 +1,11 @@
 import type { ServerOsType } from "../types.js";
+import { DETECTION_SECTIONS, DETECTION_SENTINELS, detectionSectionEnd, detectionSectionStart } from "../commands/sentinels.js";
 
-export function osDetectionCommand(expectedOs: ServerOsType) {
-  if (expectedOs === "windows") {
-    return [
-      "powershell -NoProfile -Command",
-      "\"",
-      "Write-Output '__OS_START__';",
-      "$PSVersionTable.OS;",
-      "[System.Environment]::OSVersion.VersionString;",
-      "Write-Output '__OS_END__';",
-      "Write-Output '__DOCKER_START__';",
-      "if (Get-Command docker -ErrorAction SilentlyContinue) { Write-Output 'DOCKER_INSTALLED=true'; docker --version; docker info 2>$null; if ($LASTEXITCODE -eq 0) { Write-Output 'DOCKER_DAEMON=true'; Write-Output 'DOCKER_PERMISSION=true'; Write-Output 'DOCKER_READY=true' } else { Write-Output 'DOCKER_DAEMON=false'; Write-Output 'DOCKER_PERMISSION=unknown'; Write-Output 'DOCKER_READY=false' } } else { Write-Output 'DOCKER_INSTALLED=false'; Write-Output 'DOCKER_DAEMON=false'; Write-Output 'DOCKER_PERMISSION=false'; Write-Output 'DOCKER_READY=false' };",
-      "Write-Output '__DOCKER_END__';",
-      "Write-Output '__AGENT_START__';",
-      "if ((Test-NetConnection 127.0.0.1 -Port 18080 -InformationLevel Quiet)) { Write-Output 'AGENT_PORT_OPEN=true' } else { Write-Output 'AGENT_PORT_OPEN=false' };",
-      "Write-Output '__AGENT_END__'",
-      "\""
-    ].join(" ");
-  }
-
-  if (expectedOs === "macos") {
-    return [
-      "printf '__OS_START__\\n';",
-      "sw_vers -productName 2>/dev/null; sw_vers -productVersion 2>/dev/null; uname -a;",
-      "printf '\\n__OS_END__\\n';",
-      "printf '__DOCKER_START__\\n';",
-      "if command -v docker >/dev/null 2>&1; then printf 'DOCKER_INSTALLED=true\\n'; docker --version; DOCKER_INFO_OUTPUT=$(docker info 2>&1 >/tmp/remote-game-agent-docker-info.out || true); DOCKER_INFO_OUTPUT=\"$DOCKER_INFO_OUTPUT $(cat /tmp/remote-game-agent-docker-info.out 2>/dev/null || true)\"; if docker info >/dev/null 2>&1; then printf 'DOCKER_DAEMON=true\\nDOCKER_PERMISSION=true\\nDOCKER_READY=true\\n'; elif printf '%s' \"$DOCKER_INFO_OUTPUT\" | grep -Eiq 'permission denied|Got permission denied|permission'; then printf 'DOCKER_DAEMON=true\\nDOCKER_PERMISSION=false\\nDOCKER_READY=false\\n'; else printf 'DOCKER_DAEMON=false\\nDOCKER_PERMISSION=unknown\\nDOCKER_READY=false\\n'; fi; else printf 'DOCKER_INSTALLED=false\\nDOCKER_DAEMON=false\\nDOCKER_PERMISSION=false\\nDOCKER_READY=false\\n'; fi;",
-      "printf '__DOCKER_END__\\n';",
-      "printf '__AGENT_START__\\n';",
-      "if lsof -iTCP:18080 -sTCP:LISTEN >/dev/null 2>&1; then printf 'AGENT_PORT_OPEN=true\\n'; else printf 'AGENT_PORT_OPEN=false\\n'; fi;",
-      "printf '__AGENT_END__\\n'"
-    ].join(" ");
-  }
-
-  return [
-    "printf '__OS_START__\\n';",
-    "cat /etc/os-release 2>/dev/null || uname -a;",
-    "printf '\\n__OS_END__\\n';",
-    "printf '__DOCKER_START__\\n';",
-    "if command -v docker >/dev/null 2>&1; then printf 'DOCKER_INSTALLED=true\\n'; docker --version; DOCKER_INFO_OUTPUT=$(docker info 2>&1 >/tmp/remote-game-agent-docker-info.out || true); DOCKER_INFO_OUTPUT=\"$DOCKER_INFO_OUTPUT $(cat /tmp/remote-game-agent-docker-info.out 2>/dev/null || true)\"; if docker info >/dev/null 2>&1; then printf 'DOCKER_DAEMON=true\\nDOCKER_PERMISSION=true\\nDOCKER_READY=true\\n'; elif printf '%s' \"$DOCKER_INFO_OUTPUT\" | grep -Eiq 'permission denied|Got permission denied|permission'; then printf 'DOCKER_DAEMON=true\\nDOCKER_PERMISSION=false\\nDOCKER_READY=false\\n'; else printf 'DOCKER_DAEMON=false\\nDOCKER_PERMISSION=unknown\\nDOCKER_READY=false\\n'; fi; else printf 'DOCKER_INSTALLED=false\\nDOCKER_DAEMON=false\\nDOCKER_PERMISSION=false\\nDOCKER_READY=false\\n'; fi;",
-    "printf '__DOCKER_END__\\n';",
-    "printf '__AGENT_START__\\n';",
-    "if (command -v ss >/dev/null 2>&1 && ss -ltn | grep -q ':18080 ') || (command -v netstat >/dev/null 2>&1 && netstat -ltn | grep -q ':18080 ') || (command -v lsof >/dev/null 2>&1 && lsof -iTCP:18080 -sTCP:LISTEN >/dev/null 2>&1); then printf 'AGENT_PORT_OPEN=true\\n'; else printf 'AGENT_PORT_OPEN=false\\n'; fi;",
-    "printf '__AGENT_END__\\n'"
-  ].join(" ");
-}
+export { osDetectionCommand } from "../commands/detectionCommand.js";
 
 export function extractSection(output: string, section: string) {
-  const start = `__${section}_START__`;
-  const end = `__${section}_END__`;
+  const start = detectionSectionStart(section);
+  const end = detectionSectionEnd(section);
   const startIndex = output.indexOf(start);
   const endIndex = output.indexOf(end);
 
@@ -75,22 +32,22 @@ export function doesOperatingSystemMatch(expectedOs: ServerOsType, detectedOs: s
 }
 
 export function isDockerInstalled(output: string) {
-  const dockerSection = extractSection(output, "DOCKER").toLowerCase();
-  return dockerSection.includes("docker_installed=true") || dockerSection.includes("docker version");
+  const dockerSection = extractSection(output, DETECTION_SECTIONS.docker).toLowerCase();
+  return dockerSection.includes(DETECTION_SENTINELS.dockerInstalledTrue.toLowerCase()) || dockerSection.includes("docker version");
 }
 
 export function isDockerReady(output: string) {
-  return extractSection(output, "DOCKER").toLowerCase().includes("docker_ready=true");
+  return extractSection(output, DETECTION_SECTIONS.docker).toLowerCase().includes(DETECTION_SENTINELS.dockerReadyTrue.toLowerCase());
 }
 
 export function isDockerDaemonRunning(output: string) {
-  return extractSection(output, "DOCKER").toLowerCase().includes("docker_daemon=true");
+  return extractSection(output, DETECTION_SECTIONS.docker).toLowerCase().includes(DETECTION_SENTINELS.dockerDaemonTrue.toLowerCase());
 }
 
 export function hasDockerPermission(output: string) {
-  const dockerSection = extractSection(output, "DOCKER").toLowerCase();
-  if (dockerSection.includes("docker_permission=true")) return true;
-  if (dockerSection.includes("docker_permission=false")) return false;
+  const dockerSection = extractSection(output, DETECTION_SECTIONS.docker).toLowerCase();
+  if (dockerSection.includes(DETECTION_SENTINELS.dockerPermissionTrue.toLowerCase())) return true;
+  if (dockerSection.includes(DETECTION_SENTINELS.dockerPermissionFalse.toLowerCase())) return false;
   return "unknown";
 }
 
@@ -103,5 +60,5 @@ export function dockerIssue(output: string) {
 }
 
 export function isAgentPortOpen(output: string) {
-  return extractSection(output, "AGENT").toLowerCase().includes("agent_port_open=true");
+  return extractSection(output, DETECTION_SECTIONS.agent).toLowerCase().includes(DETECTION_SENTINELS.agentPortOpenTrue.toLowerCase());
 }
